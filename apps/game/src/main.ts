@@ -1,6 +1,9 @@
 import { runApp } from "@dylanebert/shallot";
 import { createGame, type Game } from "@murim/sim";
 import { GamePlugin } from "./game/plugin";
+import { mountHud } from "./hud";
+import "./styles/theme.css";
+import "./styles/base.css";
 
 const DEFAULT_SEED = 1337;
 
@@ -17,6 +20,6 @@ function resolveSeed(): number {
 /** The headless game, shared by the engine systems and the HUD bridge. */
 export const game: Game = createGame(resolveSeed());
 
-void runApp({ plugins: [GamePlugin(game)] }).catch((error) => {
+void runApp({ plugins: [GamePlugin(game)], ui: mountHud }).catch((error) => {
     console.error("Engine failed to start:", error);
 });

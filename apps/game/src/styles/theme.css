@@ -1,0 +1,25 @@
+/* Palette. Warm dark ink over parchment paper, with a gold accent. */
+:root {
+    --ink: #0e0d0b;
+    --ink-2: #191711;
+    --ink-3: #24211a;
+    --line: #3a352a;
+    --line-strong: #4d463a;
+    --paper: #efe6d5;
+    --paper-dim: #968d7b;
+    --paper-faint: #6b6454;
+    --gold: #c9a74d;
+    --gold-dim: #8a7133;
+    --ok: #7f9c5f;
+    --info: #6fa8c9;
+    --warn: #d9a441;
+    --danger: #c23b2e;
+
+    --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    --panel-radius: 4px;
+
+    --z-topbar: 20;
+    --z-panels: 30;
+    --z-alerts: 40;
+    --z-dots: 10;
+}
