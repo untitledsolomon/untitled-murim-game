@@ -1,0 +1,7 @@
+{
+  "extends": "@dylanebert/shallot/tsconfig.json",
+  "compilerOptions": {
+    "types": ["@webgpu/types", "bun"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

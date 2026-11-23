@@ -7,6 +7,7 @@ import { generateWorld } from "./worldgen";
 
 export type { World };
 export * from "./types";
+export * from "./constants";
 
 /** A world plus the operations the rest of the program needs. */
 export interface Game {
