@@ -19,6 +19,12 @@ export const ZOOM_MIN = 60;
 /** Largest orthographic view size, a few world-wraps wide. */
 export const ZOOM_MAX = WORLD_SIZE * 4;
 
+/** Cap for the minimap frame, and its margin from the canvas edge. */
+export const MINIMAP_SIZE = 224;
+export const MINIMAP_MARGIN = 16;
+/** Height of the minimap's camera-position indicator above the sim plane. */
+export const VIEW_MARKER_HEIGHT = 0.8;
+
 export function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
 }

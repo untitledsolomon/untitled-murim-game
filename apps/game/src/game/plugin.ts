@@ -14,11 +14,22 @@ import {
     type Plugin,
     type World,
 } from "@dylanebert/shallot";
+import { CameraViewport, RenderLayers } from "@dylanebert/shallot/rendering";
 import { WORLD_SIZE, type Game } from "@murim/sim";
-import { CAMERA_FAR, CAMERA_HEIGHT, CAMERA_NEAR, RING_HEIGHT, TOWN_HEIGHT } from "./camera-math";
-import { GROUND_COLOR } from "./colors";
+import {
+    CAMERA_FAR,
+    CAMERA_HEIGHT,
+    CAMERA_NEAR,
+    RING_HEIGHT,
+    TOWN_HEIGHT,
+    VIEW_MARKER_HEIGHT,
+} from "./camera-math";
+import { GROUND_COLOR, srgbToLinear } from "./colors";
 import { MapUi, Simulation } from "./components";
-import { createTownMarker, MapSyncSystem } from "./systems/map-sync";
+import { setupMapInput } from "./input-dom";
+import { CameraControlSystem } from "./systems/camera-control";
+import { MapSyncSystem, createTownMarker } from "./systems/map-sync";
+import { MinimapSystem } from "./systems/minimap";
 import { SimulateSystem } from "./systems/simulate";
 
 /** Builds the game scenes: lights, ground, the top-down camera, and the initial
@@ -27,7 +38,7 @@ import { SimulateSystem } from "./systems/simulate";
 export function GamePlugin(game: Game): Plugin {
     return {
         name: "Murim",
-        systems: [SimulateSystem, MapSyncSystem],
+        systems: [SimulateSystem, CameraControlSystem, MinimapSystem, MapSyncSystem],
         initialize(world: World): void {
             const sim = world.resource(Simulation);
             sim.game = game;
@@ -92,6 +103,52 @@ export function GamePlugin(game: Game): Plugin {
                 ui.townMeshes.set(town.id, eid);
                 ui.townByEid.set(eid, town.id);
             }
+
+            // Minimap overview camera, drawn over the main view.
+            const minimap = world.create();
+            world.add(minimap, Camera, {
+                mode: CameraMode.Orthographic,
+                size: WORLD_SIZE,
+                order: 1,
+                near: CAMERA_NEAR,
+                far: CAMERA_FAR,
+                clearColor: 0x1c1917,
+            });
+            world.add(minimap, StandardRenderer);
+            world.add(minimap, CameraViewport, { x: 400, y: 16, width: 224, height: 224 });
+            world.add(minimap, RenderLayers, { mask: 3 });
+            world.add(minimap, Transform, {
+                translation: [WORLD_SIZE / 2, CAMERA_HEIGHT, WORLD_SIZE / 2],
+                rotation: lookAtRotation(
+                    WORLD_SIZE / 2,
+                    CAMERA_HEIGHT,
+                    WORLD_SIZE / 2,
+                    WORLD_SIZE / 2,
+                    0,
+                    WORLD_SIZE / 2,
+                    0,
+                    0,
+                    -1,
+                ),
+            });
+            ui.minimapEntity = minimap;
+
+            // Minimap camera-position indicator, visible only in the minimap.
+            const viewMarker = world.create();
+            world.add(viewMarker, Transform, {
+                translation: [0, VIEW_MARKER_HEIGHT, 0],
+                scale: [5, 0.8, 5],
+            });
+            world.add(viewMarker, MeshInstance);
+            world.add(
+                viewMarker,
+                MeshMaterial,
+                world.resource(Materials).add(StandardMaterial({ baseColor: srgbToLinear(0xf0d06a) })),
+            );
+            world.add(viewMarker, RenderLayers, { mask: 2 });
+            ui.viewMarkerEntity = viewMarker;
+
+            setupMapInput(world);
         },
     };
 }

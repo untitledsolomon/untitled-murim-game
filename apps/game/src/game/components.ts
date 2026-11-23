@@ -34,6 +34,9 @@ export interface MapUiData {
     selectedTownId: TownId | null;
     cameraEntity: number;
     ringEntity: number;
+    /** Minimap overview camera and its camera-position indicator. */
+    minimapEntity: number;
+    viewMarkerEntity: number;
     /** Shared marker material, created lazily once the renderer is up. */
     markerMaterial: MaterialHandle | null;
     townMeshes: Map<TownId, number>;
@@ -53,6 +56,8 @@ export const MapUi: Resource<MapUiData> = {
         selectedTownId: null,
         cameraEntity: -1,
         ringEntity: -1,
+        minimapEntity: -1,
+        viewMarkerEntity: -1,
         markerMaterial: null,
         townMeshes: new Map<TownId, number>(),
         townByEid: new Map<number, TownId>(),
