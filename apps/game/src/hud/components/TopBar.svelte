@@ -1,6 +1,7 @@
 <script lang="ts">
     import { game } from "../lib/game-state.svelte";
     import { formatDay } from "../lib/format";
+    import PanelMenu from "./PanelMenu.svelte";
 
     let hovered = $state<string | null>(null);
 
@@ -55,7 +56,10 @@
         {/if}
     </div>
 
-    <div class="hint">drag to pan · wheel to zoom · space to pause</div>
+    <div class="hint">
+        <PanelMenu />
+        <span>drag to pan · wheel to zoom · space to pause</span>
+    </div>
 </header>
 
 <style>
@@ -173,6 +177,9 @@
     }
 
     .hint {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         font-size: 11px;
         color: var(--paper-faint);
         white-space: nowrap;
