@@ -31,6 +31,37 @@ ask unless truly blocked. Entries are newest first.
 - **Pan cannot lose the map.** The camera center is clamped to just past the
   world edge; the map cannot be dragged off into empty space.
 
+## Phase 3 — world shape, roads, travel time
+
+- **Travel is a journey, not an instant jump.** A `travel` command plans a
+  route with Dijkstra over open roads, sets `person.journey`, and sets
+  `location = null` — the traveller leaves town. The journey completes in `tick`
+  on its arrival day, paying the route toll. There is no mid-journey redirect:
+  a second travel command while on the road is a typed `travel-failed`. The
+  movement system runs **before** commands each day, so a traveller who arrives
+  in the morning can trade in that town by noon — but a command dated the
+  arrival day fires after arrival, which is the intuitive trade.
+- **Tolls cannot send a traveller into debt.** On arrival the toll is capped at
+  the traveller's cash; the shortfall is simply not paid. A broke traveller
+  still arrives. (NPC solvency rules arrive with the traders in Phase 4b.)
+- **The road network is structural, not random.** Each county gets a spanning
+  tree over its towns plus 1–2 extra seeded loops; counties are then joined by
+  closest-town-pair edges that need no rng, so the country is **always one
+  component** (tested over 50 seeds). `travelDays = ceil(length / ROAD_SPEED)`,
+  `toll ≈ length × TOLL_PER_UNIT`. Roads carry `status` now; floods arrive in
+  Phase 4b.
+- **The carry limit binds everyone equally.** `buy` fails cleanly (a typed
+  `trade-failed`) rather than clamping the quantity, staying consistent with
+  the validation-first command model. `CARRY_CAPACITY = 60` weight units;
+  per-good weights make timber and iron bind faster than tea and medicine. The
+  player starts with 10 grain, so 50 weight units are free on day one.
+- **Road danger is read-only for now.** `RoadSnapshot.danger` is the average
+  crime of the two endpoint towns, shown to the map; fog-gating it is Phase 5.
+  As reserved earlier, `shortestPath` plans over true open roads — a small,
+  known omniscience the player does not yet have.
+- **`FORMAT_VERSION` 3 → 4.** World shape changed: roads, journeys, county
+  bounds, the road counter, and good weights. Old saves are rejected.
+
 ## Phase 2 — actors, commands, time
 
 - **`Game.send(actor, spec)` is the single entry point for commands.** The old

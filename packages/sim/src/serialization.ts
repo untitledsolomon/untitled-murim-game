@@ -1,8 +1,9 @@
 import { createRng } from "./rng";
 import type { World } from "./state";
 
-// Phase 1 set format 2; Phase 2 adds `world.commandLog` and `Outcome.actorId`.
-const FORMAT_VERSION = 3;
+// Phase 2 set format 3; Phase 3 adds the road network, journeys, county
+// bounds, carry capacity, and the road counter.
+const FORMAT_VERSION = 4;
 
 /**
  * Serialize the world to a string that restores it exactly. The RNG state is

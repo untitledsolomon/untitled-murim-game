@@ -1,17 +1,21 @@
-import { GOODS, goodLabel } from "./constants";
+import { GOODS, goodLabel, WORLD_SIZE } from "./constants";
 import { factor, round, scalePrice, sumFactors, sumPrices } from "./explain";
 import { marketPrice } from "./pricing";
 import { hashStr } from "./rng";
-import { ageOf, type World } from "./state";
+import { ageOf, type Person, type World } from "./state";
 import {
   type CountySnapshot,
   type OrganizationSnapshot,
   type OutlinerItem,
   type PersonSnapshot,
+  type PlayerJourney,
   type Price,
+  type RoadSnapshot,
   type Snapshot,
   type SnapshotOptions,
   type TownSnapshot,
+  type TownId,
+  type Vector2,
 } from "./types";
 
 /**
@@ -43,7 +47,23 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
     id: county.id,
     name: county.name,
     isCapital: county.isCapital,
+    bounds: { ...county.bounds },
   }));
+
+  const roads: RoadSnapshot[] = world.roads.map((road) => {
+    const crimeA = townById(world, road.a)?.crime ?? 0;
+    const crimeB = townById(world, road.b)?.crime ?? 0;
+    return {
+      id: road.id,
+      a: road.a,
+      b: road.b,
+      length: road.length,
+      travelDays: road.travelDays,
+      toll: road.toll,
+      status: road.status,
+      danger: Math.round(((crimeA + crimeB) / 2) * 100) / 100,
+    };
+  });
 
   const towns: TownSnapshot[] = world.towns.map((town) => {
     const goods: TownSnapshot["goods"] = {};
@@ -112,6 +132,8 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
       age: ageOf(world, player),
       background: world.player.background,
       location: player.location,
+      position: playerPosition(world, player),
+      journey: playerJourneySnapshot(world, player),
       cash: round(player.wealth),
       stock: { ...player.stock },
       family,
@@ -119,6 +141,7 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
     },
     counties,
     towns,
+    roads,
     organizations,
     goods: GOODS,
     measures,
@@ -199,4 +222,51 @@ function townInfluence(world: World, townId: string): Price {
 /** A town in the org's county, used as the reference market for its holdings. */
 function orgCountyTown(world: World, org: World["organizations"][number]): string {
   return world.towns.find((t) => t.countyId === org.countyId)?.id ?? world.towns[0]!.id;
+}
+
+function townById(world: World, townId: TownId): World["towns"][number] | undefined {
+  return world.towns.find((t) => t.id === townId);
+}
+
+function townPosition(world: World, townId: TownId): Vector2 {
+  return townById(world, townId)?.position ?? [WORLD_SIZE / 2, WORLD_SIZE / 2];
+}
+
+function lerp(a: Vector2, b: Vector2, t: number): Vector2 {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/**
+ * Where the player is on the world: a town's position, or a point on the road
+ * when travelling, interpolated within the current leg so the marker follows
+ * the road rather than jumping across the map.
+ */
+function playerPosition(world: World, player: Person): Vector2 {
+  const journey = player.journey;
+  if (journey === null) return townPosition(world, player.location ?? "");
+  const total = journey.arriveDay - journey.departDay;
+  const elapsed = Math.max(0, Math.min(world.day - journey.departDay, total - 1));
+  let acc = 0;
+  for (let i = 0; i < journey.path.length - 1; i++) {
+    const leg = journey.legs[i] ?? 1;
+    if (elapsed < acc + leg) {
+      const fraction = Math.max(0, Math.min(1, (elapsed - acc) / leg));
+      return lerp(townPosition(world, journey.path[i]!), townPosition(world, journey.path[i + 1]!), fraction);
+    }
+    acc += leg;
+  }
+  return townPosition(world, journey.path[journey.path.length - 1]!);
+}
+
+/** The journey as the HUD reads it: destination, schedule, and time to go. */
+function playerJourneySnapshot(world: World, player: Person): PlayerJourney | null {
+  const journey = player.journey;
+  if (journey === null) return null;
+  return {
+    to: journey.path[journey.path.length - 1]!,
+    departDay: journey.departDay,
+    arriveDay: journey.arriveDay,
+    days: journey.arriveDay - journey.departDay,
+    eta: Math.max(0, journey.arriveDay - world.day),
+  };
 }

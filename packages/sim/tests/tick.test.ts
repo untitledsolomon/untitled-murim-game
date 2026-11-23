@@ -40,7 +40,8 @@ describe("tick", () => {
     game.send({ kind: "player" }, { kind: "travel", to: target, day: 10 });
     game.step(); // day 1
     expect(game.snapshot().player.location).toBe(home);
-    for (let i = 0; i < 12; i++) game.step();
+    // The travel command fires on day 10; the journey then takes its days.
+    for (let i = 0; i < 30 && game.snapshot().player.location !== target; i++) game.step();
     expect(game.snapshot().player.location).toBe(target);
   });
 });

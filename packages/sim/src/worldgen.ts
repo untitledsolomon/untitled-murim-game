@@ -4,13 +4,15 @@ import {
   COUNTY_GRID,
   DAYS_PER_YEAR,
   GOODS,
+  ROAD_SPEED,
   STARTING_CASH,
+  TOLL_PER_UNIT,
   TOWNS_PER_COUNTY,
   WORLD_SIZE,
 } from "./constants";
 import { makeNameGen } from "./names";
 import { createRng, rngInt, rngPick, rngRange } from "./rng";
-import type { County, Organization, Person, Town, World } from "./state";
+import type { County, Organization, Person, Road, Town, World } from "./state";
 import type { GoodId, TownId } from "./types";
 
 interface GenCounters {
@@ -36,6 +38,7 @@ export function generateWorld(seed: number): World {
     day: 0,
     counties: [],
     towns: [],
+    roads: [],
     organizations: [],
     people: {},
     markets: {},
@@ -45,7 +48,7 @@ export function generateWorld(seed: number): World {
     history: [],
     alerts: [],
     rng,
-    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0 },
+    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0, road: 0 },
   };
 
   // Counties laid out on a square grid.
@@ -57,6 +60,7 @@ export function generateWorld(seed: number): World {
         id,
         name: names.county(),
         isCapital: world.counties.length === 0,
+        bounds: { minX: gx * cellSize, minY: gy * cellSize, maxX: (gx + 1) * cellSize, maxY: (gy + 1) * cellSize },
       };
       world.counties.push(county);
 
@@ -93,10 +97,113 @@ export function generateWorld(seed: number): World {
     }
   }
 
+  generateRoads(world, rng);
   generateOrganizations(world, counters, names, rng);
   generatePlayer(world, counters, names, rng);
 
   return world;
+}
+
+function distance(a: Town, b: Town): number {
+  const dx = a.position[0] - b.position[0];
+  const dy = a.position[1] - b.position[1];
+  return Math.hypot(dx, dy);
+}
+
+function roadBetween(world: World, a: TownId, b: TownId): Road | undefined {
+  return world.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+}
+
+function addRoad(world: World, a: TownId, b: TownId): void {
+  if (a === b || roadBetween(world, a, b)) return;
+  const at = world.towns.find((t) => t.id === a);
+  const bt = world.towns.find((t) => t.id === b);
+  if (!at || !bt) return;
+  const length = distance(at, bt);
+  world.roads.push({
+    id: `road-${world.counters.road++}`,
+    a,
+    b,
+    length: Math.round(length * 100) / 100,
+    travelDays: Math.max(1, Math.ceil(length / ROAD_SPEED)),
+    toll: Math.round(length * TOLL_PER_UNIT * 100) / 100,
+    status: "open",
+  });
+}
+
+/** A spanning tree over the towns, built with Prim's algorithm. */
+function minimumSpanningTree(world: World, towns: Town[]): Array<[TownId, TownId]> {
+  const edges: Array<[TownId, TownId]> = [];
+  if (towns.length < 2) return edges;
+  const inTree = new Set<TownId>([towns[0]!.id]);
+  while (inTree.size < towns.length) {
+    let best: { a: TownId; b: TownId; d: number } | null = null;
+    for (const t of towns) {
+      if (!inTree.has(t.id)) continue;
+      for (const u of towns) {
+        if (inTree.has(u.id)) continue;
+        const d = distance(t, u);
+        if (best === null || d < best.d) best = { a: t.id, b: u.id, d };
+      }
+    }
+    if (best === null) break;
+    edges.push([best.a, best.b]);
+    inTree.add(best.b);
+  }
+  return edges;
+}
+
+/** Two towns are in the same component when a chain of roads links them. */
+function components(world: World): Map<TownId, number> {
+  const comp = new Map<TownId, number>();
+  let index = 0;
+  for (const town of world.towns) {
+    if (comp.has(town.id)) continue;
+    const stack = [town.id];
+    comp.set(town.id, index);
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      for (const road of world.roads) {
+        const next = road.a === current ? road.b : road.b === current ? road.a : null;
+        if (next !== null && !comp.has(next)) {
+          comp.set(next, index);
+          stack.push(next);
+        }
+      }
+    }
+    index++;
+  }
+  return comp;
+}
+
+/**
+ * Build the road network. Roads are seeded but the network is structural: a
+ * spanning tree per county plus a couple of extra loops (seeded), then the
+ * closest towns' pair across components until the whole country is one
+ * network. Closeness needs no rng, so the country is always connected.
+ */
+function generateRoads(world: World, rng: ReturnType<typeof createRng>): void {
+  for (const county of world.counties) {
+    const towns = world.towns.filter((t) => t.countyId === county.id);
+    for (const [a, b] of minimumSpanningTree(world, towns)) addRoad(world, a, b);
+    const extras = rngInt(rng, 1, 3); // one or two extra loops per county
+    for (let i = 0; i < extras; i++) addRoad(world, rngPick(rng, towns).id, rngPick(rng, towns).id);
+  }
+
+  while (new Set(components(world).values()).size > 1) {
+    let best: { a: TownId; b: TownId; d: number } | null = null;
+    const comp = components(world);
+    for (const a of world.towns) {
+      const ca = comp.get(a.id)!;
+      for (const b of world.towns) {
+        if (a.id === b.id || comp.get(b.id) === ca) continue;
+        const d = distance(a, b);
+        if (best === null || d < best.d) best = { a: a.id, b: b.id, d };
+      }
+    }
+    if (best === null) break;
+    addRoad(world, best.a, best.b);
+  }
 }
 
 function makePerson(
@@ -113,6 +220,7 @@ function makePerson(
     // Born `age` years before day 0, so a 23-year-old starts at day 0 aged 23.
     birthDay: -age * DAYS_PER_YEAR,
     location: atTown,
+    journey: null,
     wealth: rngRange(world.rng, 20, 90),
     stock: {},
   };

@@ -48,6 +48,7 @@ describe("phase 2: actor-generic send and time", () => {
     // but must never leak into the player's ledger.
     if (game.world.people[foreignId]!.location !== at) {
       game.send({ kind: "person", id: foreignId }, { kind: "travel", to: at });
+      for (let i = 0; i < 300 && game.world.people[foreignId]!.location !== at; i++) game.step();
     }
     game.send({ kind: "person", id: foreignId }, { kind: "buy", good: "grain", at, quantity: 1 });
     game.send({ kind: "player" }, { kind: "buy", good: "salt", at, quantity: 1 });

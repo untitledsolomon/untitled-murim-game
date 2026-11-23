@@ -1,14 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { createGame } from "../src/index";
+import { createGame, type Game } from "../src/index";
+
+/** Step until the person arrives at `target`, with a safety cap. */
+function waitForArrival(game: Game, personId: string, target: string): void {
+  for (let i = 0; i < 300 && game.world.people[personId]!.location !== target; i++) game.step();
+}
 
 describe("commands", () => {
-  test("travel moves the player between towns", () => {
+  test("travel is not instant: the traveller leaves, then arrives after the route's days", () => {
     const game = createGame(1);
     const towns = game.snapshot().towns;
     const home = game.snapshot().player.location;
     const target = towns.find((t) => t.id !== home)!.id;
     game.send({ kind: "player" }, { kind: "travel", to: target });
+    expect(game.world.people[game.snapshot().player.personId]!.location).toBeNull();
+    expect(game.snapshot().player.journey).not.toBeNull();
+    waitForArrival(game, game.snapshot().player.personId, target);
     expect(game.snapshot().player.location).toBe(target);
+    expect(game.snapshot().player.journey).toBeNull();
   });
 
   test("buying spends cash and adds stock; selling restores cash", () => {
@@ -54,8 +63,9 @@ describe("commands", () => {
     const headLocation = game.world.people[headId]!.location;
     const target = game.snapshot().towns.find((t) => t.id !== headLocation)!.id;
     game.send({ kind: "organization", id: org.id }, { kind: "travel", to: target });
+    waitForArrival(game, headId, target);
     expect(game.world.people[headId]!.location).toBe(target);
-    expect(game.world.history[0]).toMatchObject({ kind: "travel" });
+    expect(game.world.history.some((o) => o.kind === "travel" && o.actorId === headId)).toBe(true);
   });
 
   test("a person actor command acts on that person", () => {
@@ -65,6 +75,7 @@ describe("commands", () => {
     const location = game.world.people[personId]!.location;
     const target = game.snapshot().towns.find((t) => t.id !== location)!.id;
     game.send({ kind: "person", id: personId }, { kind: "travel", to: target });
+    waitForArrival(game, personId, target);
     expect(game.world.people[personId]!.location).toBe(target);
   });
 

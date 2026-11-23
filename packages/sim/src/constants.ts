@@ -2,13 +2,13 @@ import type { GoodDef } from "./types";
 
 /** Seven essential goods (design 7.1). Later goods are "nice to have". */
 export const ESSENTIAL_GOODS: readonly GoodDef[] = [
-  { id: "grain", name: "Grain", unit: "shi" },
-  { id: "salt", name: "Salt", unit: "jin" },
-  { id: "cloth", name: "Cloth", unit: "bolt" },
-  { id: "tea", name: "Tea", unit: "catties" },
-  { id: "iron", name: "Iron", unit: "jin" },
-  { id: "medicine", name: "Medicine", unit: "package" },
-  { id: "timber", name: "Timber", unit: "beam" },
+  { id: "grain", name: "Grain", unit: "shi", weight: 1.0 },
+  { id: "salt", name: "Salt", unit: "jin", weight: 0.8 },
+  { id: "cloth", name: "Cloth", unit: "bolt", weight: 0.5 },
+  { id: "tea", name: "Tea", unit: "catties", weight: 0.4 },
+  { id: "iron", name: "Iron", unit: "jin", weight: 1.5 },
+  { id: "medicine", name: "Medicine", unit: "package", weight: 0.3 },
+  { id: "timber", name: "Timber", unit: "beam", weight: 2.0 },
 ] as const;
 
 export const GOODS: GoodDef[] = [...ESSENTIAL_GOODS];
@@ -16,6 +16,11 @@ export const GOODS: GoodDef[] = [...ESSENTIAL_GOODS];
 /** The display name of a good, shared by every module. */
 export function goodLabel(goodId: string): string {
   return GOODS.find((good) => good.id === goodId)?.name ?? goodId;
+}
+
+/** The weight (in carry units) of one unit of a good, for carry limits. */
+export function goodWeight(goodId: string): number {
+  return GOODS.find((good) => good.id === goodId)?.weight ?? 1;
 }
 
 /** Default reference base price per good, in copper cash. Towns vary from this. */
@@ -42,6 +47,15 @@ export const DAYS_PER_YEAR = MONTHS_PER_YEAR * DAYS_PER_MONTH;
 
 /** Starting wealth for the player's character, in cash. */
 export const STARTING_CASH = 200;
+
+/** World units a person covers in one full travel day on a road. */
+export const ROAD_SPEED = 12;
+
+/** Road toll in cash per world unit of road length. */
+export const TOLL_PER_UNIT = 0.2;
+
+/** Weight units one person can carry at once, across all goods. */
+export const CARRY_CAPACITY = 60;
 
 /** Price trend bounds, as a fraction of the base price. */
 export const TREND_MIN = -0.3;

@@ -9,6 +9,7 @@ import { generateWorld } from "./worldgen";
 export type { World };
 export * from "./types";
 export * from "./constants";
+export * from "./paths";
 export { commandSpec };
 
 /** A world plus the operations the rest of the program needs. */

@@ -1,8 +1,9 @@
-import { applyCommand } from "./actions";
+import { applyCommand, recordOutcome } from "./actions";
 import { goodLabel, TREND_MAX, TREND_MIN, MEAN_REVERSION, PRICE_NOISE } from "./constants";
 import { rngGaussian } from "./rng";
-import { makeAlert, type World } from "./state";
-import type { GoodId } from "./types";
+import type { Person, World } from "./state";
+import { makeAlert } from "./state";
+import type { GoodId, TownId } from "./types";
 
 /**
  * A system runs once per fixed tick. The ordered list below is where later
@@ -22,6 +23,36 @@ function runDueCommands(world: World): void {
   }
   world.queue = pending;
   for (const command of due) applyCommand(world, command);
+}
+
+/**
+ * Complete journeys whose arrival day has come. Runs before commands, so a
+ * traveller who arrives this morning can trade this noon.
+ */
+function runJourneys(world: World): void {
+  for (const personId of Object.keys(world.people)) {
+    const person = world.people[personId] as Person;
+    const journey = person.journey;
+    if (journey === null || journey === undefined) continue;
+    if (world.day < journey.arriveDay) continue;
+    const destination = journey.path[journey.path.length - 1]!;
+    person.journey = null;
+    person.location = destination;
+    // Travellers pay the route toll on arrival; a toll can never send a
+    // person into debt, so a traveller with no cash pays nothing.
+    const toll = Math.min(journey.toll, person.wealth);
+    if (toll > 0) {
+      person.wealth -= toll;
+      recordOutcome(
+        world,
+        personId,
+        `${person.name} arrives in ${townName(world, destination)} and pays ${journey.toll.toFixed(1)} cash in tolls.`,
+        "travel",
+      );
+    } else {
+      recordOutcome(world, personId, `${person.name} arrives in ${townName(world, destination)}.`, "travel");
+    }
+  }
 }
 
 function driftPrices(world: World): void {
@@ -73,8 +104,9 @@ function emitAlerts(world: World): void {
 }
 
 /**
- * Advance the world by one day. Commands that are due run first, in the
- * order they were submitted, then every system observes the new day.
+ * Advance the world by one day. Journeys that reached their destination run
+ * first (travellers arrive before they act), then commands that are due run
+ * in the order they were submitted, then every system observes the new day.
  */
 export function stepDay(world: World): void {
   world.day += 1;
@@ -83,11 +115,16 @@ export function stepDay(world: World): void {
 
 /** The ordered systems that make up one tick. */
 export const SYSTEMS: System[] = [
+  { name: "travel", run: runJourneys },
   { name: "commands", run: runDueCommands },
   { name: "prices", run: driftPrices },
   { name: "society", run: driftSociety },
   { name: "alerts", run: emitAlerts },
 ];
+
+function townName(world: World, townId: TownId): string {
+  return world.towns.find((t) => t.id === townId)?.name ?? townId;
+}
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));

@@ -17,6 +17,8 @@ export interface GoodDef {
   id: GoodId;
   name: string;
   unit: string;
+  /** Weight in carry units, for the carry-capacity limit on travel. */
+  weight: number;
 }
 
 /** One contributor to an explainable number. Factors always sum to the value. */
@@ -45,6 +47,20 @@ export interface CountySnapshot {
   id: CountyId;
   name: string;
   isCapital: boolean;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+/** A road as the map reads it. `status` and `danger` are fog-gated in Phase 5. */
+export interface RoadSnapshot {
+  id: string;
+  a: TownId;
+  b: TownId;
+  length: number;
+  travelDays: number;
+  toll: number;
+  status: "open" | "flooded";
+  /** Read-only danger of the road: average crime of the two endpoint towns. */
+  danger: number;
 }
 
 export interface GoodsSnapshot {
@@ -122,12 +138,27 @@ export interface OutlinerItem {
   priority: number;
 }
 
+export interface PlayerJourney {
+  /** The destination town. */
+  to: TownId;
+  departDay: DayNumber;
+  arriveDay: DayNumber;
+  /** Total travel days of the route. */
+  days: number;
+  /** Days remaining until arrival, at this snapshot's day. */
+  eta: number;
+}
+
 export interface PlayerSnapshot {
   personId: PersonId;
   name: string;
   age: number;
   background: string;
   location: TownId | null;
+  /** World position, interpolated along the road when travelling. */
+  position: Vector2;
+  /** The road journey currently under way, or null. */
+  journey: PlayerJourney | null;
   cash: number;
   stock: Record<GoodId, number>;
   family: PersonSnapshot[];
@@ -148,6 +179,7 @@ export interface Snapshot {
   player: PlayerSnapshot;
   counties: CountySnapshot[];
   towns: TownSnapshot[];
+  roads: RoadSnapshot[];
   organizations: OrganizationSnapshot[];
   goods: GoodDef[];
   measures: Measures;

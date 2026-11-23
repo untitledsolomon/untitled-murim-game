@@ -1,10 +1,17 @@
+import { CARRY_CAPACITY, goodWeight } from "./constants";
+import { shortestPath } from "./paths";
 import { marketPriceValue, sellPrice } from "./pricing";
 import { personStock, type Person, type World } from "./state";
 import type { ActorRef, Command, CommandSpec, PersonId, TownId } from "./types";
 
-function recordOutcome(world: World, actorId: PersonId | null, text: string, kind: string): void {
+export function recordOutcome(world: World, actorId: PersonId | null, text: string, kind: string): void {
   world.history.push({ day: world.day, actorId, text, kind });
   if (world.history.length > 500) world.history.shift();
+}
+
+/** Total weight of everything a person carries, in carry units. */
+function weightInUse(person: Person): number {
+  return Object.entries(person.stock).reduce((sum, [good, quantity]) => sum + goodWeight(good) * quantity, 0);
 }
 
 function playerPerson(world: World): Person {
@@ -64,8 +71,34 @@ export function applyCommand(world: World, command: Command): void {
         failOutcome(world, person.id, actorLabel, `is already in ${townName(world, command.to)}.`, "travel-failed");
         break;
       }
-      person.location = command.to;
-      recordOutcome(world, person.id, `${actorLabel} travels to ${townName(world, command.to)}.`, "travel");
+      if (person.journey !== null) {
+        failOutcome(world, person.id, actorLabel, "is already on the road and cannot change route.", "travel-failed");
+        break;
+      }
+      const from = person.location;
+      if (from === null) {
+        failOutcome(world, person.id, actorLabel, "cannot start a journey from the roadside.", "travel-failed");
+        break;
+      }
+      const plan = shortestPath(world, from, command.to);
+      if (plan === null) {
+        failOutcome(world, person.id, actorLabel, `has no open route to ${townName(world, command.to)}.`, "travel-failed");
+        break;
+      }
+      person.location = null;
+      person.journey = {
+        path: plan.path,
+        legs: plan.legs,
+        departDay: world.day,
+        arriveDay: world.day + plan.days,
+        toll: plan.toll,
+      };
+      recordOutcome(
+        world,
+        person.id,
+        `${actorLabel} sets out for ${townName(world, command.to)}, a ${plan.days}-day journey.`,
+        "travel",
+      );
       break;
     }
     case "buy": {
@@ -75,6 +108,18 @@ export function applyCommand(world: World, command: Command): void {
       }
       if (person.location !== command.at) {
         failOutcome(world, person.id, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
+        break;
+      }
+      const capacityLeft = CARRY_CAPACITY - weightInUse(person);
+      const maxQuantity = Math.floor(capacityLeft / goodWeight(command.good));
+      if (command.quantity > maxQuantity) {
+        failOutcome(
+          world,
+          person.id,
+          actorLabel,
+          `cannot carry ${command.quantity} ${command.good}: the load would exceed the carry limit.`,
+          "trade-failed",
+        );
         break;
       }
       const price = marketPriceValue(world, command.at, command.good);

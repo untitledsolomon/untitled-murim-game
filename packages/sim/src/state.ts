@@ -18,8 +18,10 @@ export interface Person {
   name: string;
   /** The day this person was born. Age is derived, never stored. */
   birthDay: DayNumber;
-  /** Null when the person is not on the map (unknown or dead). */
+  /** Null when the person is not on the map (unknown, dead, or on the road). */
   location: TownId | null;
+  /** The road journey this person is currently on, or null when standing still. */
+  journey: Journey | null;
   /** Cash in hand. */
   wealth: number;
   /** Goods carried, keyed by good id. */
@@ -28,10 +30,24 @@ export interface Person {
   familyRole?: "spouse" | "child" | "parent";
 }
 
+/** A journey along roads, started with a travel command and completed in tick. */
+export interface Journey {
+  /** The town path, departure town first and destination last. */
+  path: TownId[];
+  /** Travel days of each leg, matching path[i] -> path[i + 1]. */
+  legs: number[];
+  departDay: DayNumber;
+  arriveDay: DayNumber;
+  /** Total road toll to pay on arrival. */
+  toll: number;
+}
+
 export interface County {
   id: CountyId;
   name: string;
   isCapital: boolean;
+  /** The county's grid cell, for borders and world placement. */
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 export interface Town {
@@ -70,6 +86,20 @@ export interface MarketEntry {
   trend: number;
 }
 
+/** A road between two towns. Travel costs time and a toll. */
+export interface Road {
+  id: string;
+  a: TownId;
+  b: TownId;
+  /** Straight-line length in world units. */
+  length: number;
+  /** Whole days to travel, ceil(length / ROAD_SPEED). */
+  travelDays: number;
+  /** One-time toll for using this road, from its length. */
+  toll: number;
+  status: "open" | "flooded";
+}
+
 export interface Outcome {
   day: DayNumber;
   /** The person who acted; null when the actor could not be resolved. */
@@ -102,6 +132,7 @@ export interface World {
   day: DayNumber;
   counties: County[];
   towns: Town[];
+  roads: Road[];
   organizations: Organization[];
   people: Record<PersonId, Person>;
   markets: Record<TownId, Record<GoodId, MarketEntry>>;
@@ -116,7 +147,16 @@ export interface World {
   alerts: AlertState[];
   rng: Rng;
   /** Next counters, so ids stay unique across a run. */
-  counters: { person: number; town: number; county: number; org: number; holding: number; alert: number; command: number };
+  counters: {
+    person: number;
+    town: number;
+    county: number;
+    org: number;
+    holding: number;
+    alert: number;
+    command: number;
+    road: number;
+  };
 }
 
 /** A person's age in whole years, derived from their birth day. */
