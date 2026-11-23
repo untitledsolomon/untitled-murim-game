@@ -22,9 +22,12 @@
     {#if open}
         <div class="menu" role="menu">
             {#each PANELS as p}
-                <button role="menuitem" onclick={() => pick(p.id)}>
-                    {p.title}
-                    {#if game.openPanels.includes(p.id)}<span class="open-mark">•</span>{/if}
+                <button role="menuitem" onclick={() => pick(p.id)} class:disabled={!p.enabled}>
+                    <span>{p.title}</span>
+                    <span class="right">
+                        {#if !p.enabled}<span class="later">(later)</span>{/if}
+                        {#if game.openPanels.includes(p.id)}<span class="open-mark">•</span>{/if}
+                    </span>
                 </button>
             {/each}
         </div>
@@ -77,13 +80,26 @@
         color: var(--paper-dim);
         font-size: 13px;
         text-align: left;
-        display: flex;
-        justify-content: space-between;
     }
 
-    .menu button:hover {
+    .menu button:hover:not(.disabled) {
         color: var(--paper);
         background: var(--ink-2);
+    }
+
+    .menu button.disabled {
+        color: var(--paper-faint);
+    }
+
+    .menu button .right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .later {
+        font-size: 11px;
+        color: var(--paper-faint);
     }
 
     .open-mark {

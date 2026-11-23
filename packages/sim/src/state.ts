@@ -1,3 +1,4 @@
+import { DAYS_PER_YEAR } from "./constants";
 import type { Rng } from "./rng";
 import type {
   Command,
@@ -14,7 +15,8 @@ import type {
 export interface Person {
   id: PersonId;
   name: string;
-  age: number;
+  /** The day this person was born. Age is derived, never stored. */
+  birthDay: DayNumber;
   /** Null when the person is not on the map (unknown or dead). */
   location: TownId | null;
   /** Cash in hand. */
@@ -109,7 +111,12 @@ export interface World {
   alerts: AlertState[];
   rng: Rng;
   /** Next counters, so ids stay unique across a run. */
-  counters: { person: number; town: number; county: number; org: number; holding: number; alert: number };
+  counters: { person: number; town: number; county: number; org: number; holding: number; alert: number; command: number };
+}
+
+/** A person's age in whole years, derived from their birth day. */
+export function ageOf(world: World, person: Person): number {
+  return Math.max(0, Math.floor((world.day - person.birthDay) / DAYS_PER_YEAR));
 }
 
 export function makeAlert(world: World, severity: AlertState["severity"], text: string, kind: string): AlertState {

@@ -32,7 +32,9 @@ export function createWorld(seed: number): World {
 export function createGame(seed: number): Game {
   const world = generateWorld(seed);
   return {
-    seed,
+    get seed() {
+      return world.seed;
+    },
     get world() {
       return world;
     },
@@ -56,17 +58,5 @@ export function createGame(seed: number): Game {
 }
 
 function copyWorld(target: World, source: World): void {
-  target.seed = source.seed;
-  target.day = source.day;
-  target.counties = source.counties;
-  target.towns = source.towns;
-  target.organizations = source.organizations;
-  target.people = source.people;
-  target.markets = source.markets;
-  target.player = source.player;
-  target.queue = source.queue;
-  target.history = source.history;
-  target.alerts = source.alerts;
-  target.rng = source.rng;
-  target.counters = source.counters;
+  Object.assign(target, source);
 }

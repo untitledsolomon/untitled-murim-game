@@ -2,10 +2,9 @@
     import { game } from "../lib/game-state.svelte";
 
     const kinds: Record<string, string> = {
-        travel: "Travel",
-        price: "Price",
-        alert: "Alert",
-        opportunity: "Opportunity",
+        unrest: "Unrest",
+        prices: "Prices",
+        reputation: "Reputation",
     };
 
     // Show only the highest-priority items so the feed stays brief.

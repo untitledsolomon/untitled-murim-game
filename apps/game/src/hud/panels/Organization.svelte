@@ -1,6 +1,6 @@
 <script lang="ts">
     import { game } from "../lib/game-state.svelte";
-    import { formatMoney } from "../lib/format";
+    import { formatMoney, formatYearsAgo } from "../lib/format";
     import PanelFrame from "./PanelFrame.svelte";
 
     const kindLabel: Record<string, string> = {
@@ -54,7 +54,7 @@
                     <div class="detail">
                         <dl class="kv">
                             <dt>Founded</dt>
-                            <dd>Day {detail.foundedDay}</dd>
+                            <dd>{formatYearsAgo(detail.foundedDay, snap.day)}</dd>
                             <dt>Members</dt>
                             <dd>{detail.members.map((m) => m.personId).length}</dd>
                         </dl>

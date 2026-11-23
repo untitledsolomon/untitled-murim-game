@@ -5,7 +5,7 @@
 
 {#if game.snapshot && game.snapshot.alerts.length > 0}
     <div class="alerts" aria-label="Alerts">
-        {#each game.snapshot.alerts.slice(-6).reverse() as a (a.id)}
+        {#each game.snapshot.alerts.slice(0, 6) as a (a.id)}
             <div class="alert {a.severity}">
                 <span class="day">{formatDay(a.day)}</span>
                 <span class="text">{a.text}</span>

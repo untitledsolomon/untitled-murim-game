@@ -1,6 +1,7 @@
 import { Transform, type World, Viewports } from "@dylanebert/shallot";
 import { CameraViewport } from "@dylanebert/shallot/rendering";
 import { MINIMAP_MARGIN, MINIMAP_SIZE, VIEW_MARKER_HEIGHT } from "../camera-math";
+import { TOPBAR_HEIGHT } from "../../hud/lib/layout";
 import { MapUi } from "../components";
 import { CameraControlSystem } from "./camera-control";
 
@@ -30,7 +31,8 @@ export const MinimapSystem = {
         );
         const frame = world.storage(CameraViewport);
         frame.x.set(ui.minimapEntity, width - MINIMAP_MARGIN - size);
-        frame.y.set(ui.minimapEntity, MINIMAP_MARGIN);
+        // Below the top bar, so the fixed chrome never overlaps the map view.
+        frame.y.set(ui.minimapEntity, TOPBAR_HEIGHT + MINIMAP_MARGIN);
         frame.width.set(ui.minimapEntity, size);
         frame.height.set(ui.minimapEntity, size);
 

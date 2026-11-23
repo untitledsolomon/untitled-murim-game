@@ -164,7 +164,4 @@ export interface CommandBase {
 export type Command =
   | (CommandBase & { kind: "travel"; to: TownId })
   | (CommandBase & { kind: "buy"; good: GoodId; at: TownId; quantity: number })
-  | (CommandBase & { kind: "sell"; good: GoodId; at: TownId; quantity: number })
-  | (CommandBase & { kind: "found_organization"; at: TownId })
-  | (CommandBase & { kind: "influence"; target: OrganizationId; label: string })
-  | (CommandBase & { kind: "unimplemented"; label: string });
+  | (CommandBase & { kind: "sell"; good: GoodId; at: TownId; quantity: number });

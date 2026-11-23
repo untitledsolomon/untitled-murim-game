@@ -19,10 +19,6 @@ describe("determinism", () => {
   });
 
   test("the same seed and command list replay to the same state", () => {
-    const commands: Command[] = [
-      { id: "c1", actor: { kind: "player" }, day: 2, kind: "travel", to: "" },
-      { id: "c2", actor: { kind: "player" }, day: 5, kind: "buy", good: "grain", at: "", quantity: 4 },
-    ];
     // Resolve the town ids from the world itself, then replay with identical targets.
     const probe = createGame(4242);
     const towns = probe.snapshot().towns;

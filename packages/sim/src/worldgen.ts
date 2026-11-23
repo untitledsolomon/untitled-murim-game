@@ -2,6 +2,7 @@ import {
   BASE_PRICES,
   COUNTY_COUNT,
   COUNTY_GRID,
+  DAYS_PER_YEAR,
   GOODS,
   STARTING_CASH,
   TOWNS_PER_COUNTY,
@@ -43,7 +44,7 @@ export function generateWorld(seed: number): World {
     history: [],
     alerts: [],
     rng,
-    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0 },
+    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0 },
   };
 
   // Counties laid out on a square grid.
@@ -108,7 +109,8 @@ function makePerson(
   const person: Person = {
     id,
     name: names.person(),
-    age,
+    // Born `age` years before day 0, so a 23-year-old starts at day 0 aged 23.
+    birthDay: -age * DAYS_PER_YEAR,
     location: atTown,
     wealth: rngRange(world.rng, 20, 90),
     stock: {},

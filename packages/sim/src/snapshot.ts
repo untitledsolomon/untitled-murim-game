@@ -1,8 +1,8 @@
-import { GOODS } from "./constants";
+import { GOODS, goodLabel } from "./constants";
 import { factor, round, scalePrice, sumFactors, sumPrices } from "./explain";
 import { marketPrice } from "./pricing";
 import { hashStr } from "./rng";
-import type { World } from "./state";
+import { ageOf, type World } from "./state";
 import {
   type CountySnapshot,
   type OrganizationSnapshot,
@@ -21,7 +21,7 @@ export function buildSnapshot(world: World): Snapshot {
   const people: Record<string, PersonSnapshot> = {};
   for (const personId of Object.keys(world.people)) {
     const person = world.people[personId]!;
-    people[personId] = { id: person.id, name: person.name, age: person.age, location: person.location };
+    people[personId] = { id: person.id, name: person.name, age: ageOf(world, person), location: person.location };
   }
 
   const player = world.people[world.player.personId]!;
@@ -96,7 +96,7 @@ export function buildSnapshot(world: World): Snapshot {
     player: {
       personId: player.id,
       name: player.name,
-      age: player.age,
+      age: ageOf(world, player),
       background: world.player.background,
       location: player.location,
       cash: round(player.wealth),
@@ -149,14 +149,14 @@ function buildOutliner(
   const items: OutlinerItem[] = [];
   for (const town of towns) {
     if (town.unrest > 0.4) {
-      items.push({ id: `todo-${town.id}`, label: `Unrest rising in ${town.name}`, kind: "unrest", priority: town.unrest });
+      items.push({ id: `todo-${town.id}`, label: `Unrest high in ${town.name}`, kind: "unrest", priority: town.unrest });
     }
     for (const goodId of Object.keys(town.goods)) {
       const entry = town.goods[goodId]!;
       if (Math.abs(entry.trend) > 0.15) {
         items.push({
           id: `todo-${town.id}-${goodId}`,
-          label: `${goodLabel(goodId)} ${entry.trend > 0 ? "surplus of value" : "bargain"} in ${town.name}`,
+          label: `${goodLabel(goodId)} ${entry.trend > 0 ? "scarce and dear" : "plentiful and cheap"} in ${town.name}`,
           kind: "prices",
           priority: Math.abs(entry.trend),
         });
@@ -185,8 +185,4 @@ function townInfluence(world: World, townId: string): Price {
 /** A town in the org's county, used as the reference market for its holdings. */
 function orgCountyTown(world: World, org: World["organizations"][number]): string {
   return world.towns.find((t) => t.countyId === org.countyId)?.id ?? world.towns[0]!.id;
-}
-
-function goodLabel(goodId: string): string {
-  return GOODS.find((good) => good.id === goodId)?.name ?? goodId;
 }

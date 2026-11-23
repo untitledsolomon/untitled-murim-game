@@ -1,22 +1,21 @@
-import { addFactor, factor } from "./explain";
+import { addFactor, factor, sumFactors } from "./explain";
 import type { GoodId, Price, TownId } from "./types";
 import type { World } from "./state";
 
 /**
  * The current market price of a good in a town.
- * Value = base price + base price × trend. Each contributor is explained.
+ * Value = base price + base price × trend. Each contributor is explained,
+ * and the value is the exact sum of the factors.
  */
 export function marketPrice(world: World, townId: TownId, goodId: GoodId): Price {
   const entry = world.markets[townId]?.[goodId];
   const base = entry?.base ?? 1;
   const trend = entry?.trend ?? 0;
-  const baseFactor = factor("Base price", base);
-  const trendFactor = factor("Local surplus or deficit", base * trend);
-  const raw = base + base * trend;
-  return {
-    value: Math.round(raw * 100) / 100,
-    factors: [baseFactor, trendFactor],
-  };
+  return sumFactors([
+    factor("Base price", base),
+    // Positive trend means the price sits above base, i.e. the good is scarce.
+    factor("Local supply vs demand", base * trend),
+  ]);
 }
 
 /** Simple numeric price, no explanation attached. */

@@ -1,6 +1,6 @@
 import { marketPriceValue, sellPrice } from "./pricing";
-import { makeAlert, personStock, type World } from "./state";
-import type { ActorRef, Command, GoodId, TownId } from "./types";
+import { personStock, type Person, type World } from "./state";
+import type { ActorRef, Command, TownId } from "./types";
 
 /** The command queue is a plain list; each command names the day it executes. */
 export type Queue = Command[];
@@ -14,35 +14,74 @@ function recordOutcome(world: World, text: string, kind: string): void {
   if (world.history.length > 500) world.history.shift();
 }
 
-function playerPerson(world: World) {
+function playerPerson(world: World): Person {
   const person = world.people[world.player.personId];
   if (!person) throw new Error("Player person not found in world");
   return person;
 }
 
 /**
+ * Resolve an actor reference to the person who acts. The player is their
+ * person; a `person` actor is that person; an `organization` actor is its head
+ * (first member). Same rules for everyone: validation must not depend on which
+ * kind of actor issued the command.
+ */
+function resolveActorPerson(world: World, actor: ActorRef): Person {
+  if (actor.kind === "player") return playerPerson(world);
+  if (actor.kind === "person") {
+    const person = world.people[actor.id];
+    if (!person) throw new Error(`Unknown person ${actor.id}`);
+    return person;
+  }
+  const org = world.organizations.find((o) => o.id === actor.id);
+  const headId = org?.memberIds[0];
+  const person = headId === undefined ? undefined : world.people[headId];
+  if (!person) throw new Error(`Organization ${actor.id} has no head`);
+  return person;
+}
+
+/** Fail a command with a typed outcome; no state is changed by the caller. */
+function failOutcome(world: World, actorLabel: string, text: string, kind: "trade-failed" | "travel-failed"): void {
+  recordOutcome(world, `${actorLabel} ${text}`, kind);
+}
+
+function validQuantity(quantity: number): boolean {
+  return Number.isInteger(quantity) && quantity >= 1;
+}
+
+/**
  * Apply one command to the world. Commands are the single shared interface
- * for the player and for AI. Unimplemented kinds still record an outcome, so
- * every command is visible and testable rather than silently dropped.
+ * for the player and for AI. Every command validates against the resolved
+ * actor first and records a typed failure outcome when it cannot run.
  */
 export function applyCommand(world: World, command: Command): void {
   const actorLabel = actorLabelFor(world, command.actor);
-  let targetTown: TownId | null = null;
+  const person = resolveActorOrFail(world, command);
+  if (person === null) return;
 
   switch (command.kind) {
     case "travel": {
-      const person = playerPerson(world);
+      if (command.to === person.location) {
+        failOutcome(world, actorLabel, `is already in ${townName(world, command.to)}.`, "travel-failed");
+        break;
+      }
       person.location = command.to;
-      targetTown = command.to;
       recordOutcome(world, `${actorLabel} travels to ${townName(world, command.to)}.`, "travel");
       break;
     }
     case "buy": {
-      const person = playerPerson(world);
+      if (!validQuantity(command.quantity)) {
+        failOutcome(world, actorLabel, `tried to buy an invalid quantity of ${command.good}.`, "trade-failed");
+        break;
+      }
+      if (person.location !== command.at) {
+        failOutcome(world, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
+        break;
+      }
       const price = marketPriceValue(world, command.at, command.good);
       const cost = price * command.quantity;
       if (cost > person.wealth) {
-        recordOutcome(world, `${actorLabel} lacks cash to buy ${command.quantity} ${command.good}.`, "trade-failed");
+        failOutcome(world, actorLabel, `lacks cash to buy ${command.quantity} ${command.good}.`, "trade-failed");
         break;
       }
       person.wealth -= cost;
@@ -55,11 +94,18 @@ export function applyCommand(world: World, command: Command): void {
       break;
     }
     case "sell": {
-      const person = playerPerson(world);
+      if (!validQuantity(command.quantity)) {
+        failOutcome(world, actorLabel, `tried to sell an invalid quantity of ${command.good}.`, "trade-failed");
+        break;
+      }
+      if (person.location !== command.at) {
+        failOutcome(world, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
+        break;
+      }
       const held = personStock(person, command.good);
       const amount = Math.min(command.quantity, held);
       if (amount <= 0) {
-        recordOutcome(world, `${actorLabel} has no ${command.good} to sell.`, "trade-failed");
+        failOutcome(world, actorLabel, `has no ${command.good} to sell.`, "trade-failed");
         break;
       }
       const price = sellPrice(world, command.at, command.good).value;
@@ -73,22 +119,21 @@ export function applyCommand(world: World, command: Command): void {
       );
       break;
     }
-    case "found_organization": {
-      targetTown = command.at;
-      // The organization itself is created by worldgen; founding is recorded here.
-      recordOutcome(world, `${actorLabel} begins founding an organization at ${townName(world, command.at)}.`, "founding");
-      makeAlert(world, "info", `Founding work started at ${townName(world, command.at)}.`, "founding");
-      break;
-    }
-    case "influence":
-      recordOutcome(world, `${actorLabel} works to influence a rival organization: ${command.label}.`, "influence");
-      break;
-    case "unimplemented":
-      recordOutcome(world, `${actorLabel} ${command.label} (not yet implemented).`, "unimplemented");
-      break;
   }
+}
 
-  void targetTown;
+/**
+ * Resolve the acting person, or record a typed failure when the actor no
+ * longer exists. A bad actor reference must never crash a day step.
+ */
+function resolveActorOrFail(world: World, command: Command): Person | null {
+  try {
+    return resolveActorPerson(world, command.actor);
+  } catch {
+    const failureKind = command.kind === "travel" ? "travel-failed" : "trade-failed";
+    failOutcome(world, actorLabelFor(world, command.actor), "cannot act: the actor is unknown.", failureKind);
+    return null;
+  }
 }
 
 function actorLabelFor(world: World, actor: ActorRef): string {

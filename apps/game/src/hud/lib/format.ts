@@ -15,3 +15,11 @@ export function formatDay(day: number): string {
 export function formatMoney(value: number): string {
     return `${Math.round(value).toLocaleString("en-US")} cash`;
 }
+
+/** "Founded 3 years ago" from a founding day against a reference day. */
+export function formatYearsAgo(foundedDay: number, today: number): string {
+    const years = Math.floor(Math.max(0, today - foundedDay) / DAYS_PER_YEAR);
+    if (years <= 0) return "this year";
+    if (years === 1) return "1 year ago";
+    return `${years} years ago`;
+}

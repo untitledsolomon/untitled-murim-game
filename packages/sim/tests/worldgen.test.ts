@@ -53,4 +53,11 @@ describe("world generation", () => {
     expect(player!.wealth).toBeGreaterThan(0);
     expect(world.player.familyIds.length).toBeGreaterThan(0);
   });
+
+  test("every person is born on or before the current day", () => {
+    const world = createWorld(5);
+    for (const person of Object.values(world.people)) {
+      expect(person.birthDay, person.name).toBeLessThanOrEqual(world.day);
+    }
+  });
 });

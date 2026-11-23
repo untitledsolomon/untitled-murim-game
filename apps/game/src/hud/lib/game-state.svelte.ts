@@ -26,7 +26,8 @@ export const game = $state.raw({
     camera: { center: [110, 110] as [number, number], zoom: 220, viewportW: 1, viewportH: 1 } as HudCamera,
     /** Open panel ids, last one on top. */
     openPanels: [] as string[],
-    paused: false,
+    // The game starts paused; the player chooses when the world moves.
+    paused: true,
     /** Index into SPEEDS. */
     speedIndex: 2,
 });

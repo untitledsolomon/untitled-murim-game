@@ -1,5 +1,5 @@
 import { applyCommand } from "./actions";
-import { TREND_MAX, TREND_MIN, MEAN_REVERSION, PRICE_NOISE } from "./constants";
+import { goodLabel, TREND_MAX, TREND_MIN, MEAN_REVERSION, PRICE_NOISE } from "./constants";
 import { rngGaussian } from "./rng";
 import { makeAlert, type World } from "./state";
 import type { GoodId } from "./types";
@@ -48,6 +48,7 @@ function driftSociety(world: World): void {
   }
 }
 
+// TODO(phase 5): replace this random alert emission with courier-delayed reports.
 function emitAlerts(world: World): void {
   const threshold = 0.12;
   const rng = world.rng;
@@ -94,17 +95,4 @@ function clamp01(value: number): number {
 
 function clamp(min: number, max: number, value: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function goodLabel(goodId: GoodId): string {
-  const words: Record<string, string> = {
-    grain: "Grain",
-    salt: "Salt",
-    cloth: "Cloth",
-    tea: "Tea",
-    iron: "Iron",
-    medicine: "Medicine",
-    timber: "Timber",
-  };
-  return words[goodId] ?? goodId;
 }

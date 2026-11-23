@@ -1,7 +1,7 @@
 import { createRng } from "./rng";
 import type { World } from "./state";
 
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 
 /**
  * Serialize the world to a string that restores it exactly. The RNG state is

@@ -13,6 +13,11 @@ export const ESSENTIAL_GOODS: readonly GoodDef[] = [
 
 export const GOODS: GoodDef[] = [...ESSENTIAL_GOODS];
 
+/** The display name of a good, shared by every module. */
+export function goodLabel(goodId: string): string {
+  return GOODS.find((good) => good.id === goodId)?.name ?? goodId;
+}
+
 /** Default reference base price per good, in copper cash. Towns vary from this. */
 export const BASE_PRICES: Record<string, number> = {
   grain: 2,

@@ -2,15 +2,7 @@
 <script lang="ts">
     import { game, bringToFront, closePanel } from "../lib/game-state.svelte";
     import { PANELS, type PanelDef } from "./registry";
-    import Family from "./Family.svelte";
-    import Organization from "./Organization.svelte";
-    import Town from "./Town.svelte";
-    import Trade from "./Trade.svelte";
-    import Information from "./Information.svelte";
-    import Politics from "./Politics.svelte";
-    import Banking from "./Banking.svelte";
-    import Martial from "./Martial.svelte";
-    import Succession from "./Succession.svelte";
+    import NotYetAvailable from "./NotYetAvailable.svelte";
 
     const W = 400;
     const H = 320;
@@ -90,24 +82,11 @@
                 <button class="close" title="Close" onclick={() => closePanel(id)}>✕</button>
             </div>
             <div class="content">
-                {#if id === "family"}
-                    <Family />
-                {:else if id === "organization"}
-                    <Organization />
-                {:else if id === "town"}
-                    <Town />
-                {:else if id === "trade"}
-                    <Trade />
-                {:else if id === "information"}
-                    <Information />
-                {:else if id === "politics"}
-                    <Politics />
-                {:else if id === "banking"}
-                    <Banking />
-                {:else if id === "martial"}
-                    <Martial />
-                {:else if id === "succession"}
-                    <Succession />
+                {#if def.enabled}
+                    {@const Cmp = def.component}
+                    <Cmp />
+                {:else}
+                    <NotYetAvailable title={def.title} />
                 {/if}
             </div>
         </div>

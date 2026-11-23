@@ -149,6 +149,9 @@ export function GamePlugin(game: Game): Plugin {
             ui.viewMarkerEntity = viewMarker;
 
             setupMapInput(world);
+
+            // The game begins paused; the player starts time when ready.
+            world.pause();
         },
     };
 }
