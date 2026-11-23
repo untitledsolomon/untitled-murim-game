@@ -1,8 +1,9 @@
+import { applyCommand } from "./actions";
 import { buildSnapshot } from "./snapshot";
 import { deserializeState, serializeState } from "./serialization";
 import { stepDay } from "./tick";
 import type { World } from "./state";
-import type { Command, Snapshot } from "./types";
+import type { Command, Snapshot, SnapshotOptions } from "./types";
 import { generateWorld } from "./worldgen";
 
 export type { World };
@@ -16,8 +17,15 @@ export interface Game {
   /** Advance the simulation by one day. Safe to call many times. */
   step(): void;
   /** The UI-facing read of the current state. Pure and cheap. */
-  snapshot(): Snapshot;
-  /** Queue a command, for the player or for AI. */
+  snapshot(options?: SnapshotOptions): Snapshot;
+  /**
+   * The single entry point for commands, player or AI. A command that is
+   * already due (`command.day <= world.day`) applies immediately, in
+   * submission order, so a paused game reacts the instant the player acts.
+   * A future-dated command is queued for its day. See also `enqueue`.
+   */
+  send(command: Command): void;
+  /** Queue a command without applying it. Tests and the queue model use this. */
   enqueue(command: Command): void;
   serialize(): string;
   load(text: string): void;
@@ -41,8 +49,17 @@ export function createGame(seed: number): Game {
     step() {
       stepDay(world);
     },
-    snapshot() {
-      return buildSnapshot(world);
+    snapshot(options?: SnapshotOptions) {
+      return buildSnapshot(world, options);
+    },
+    send(command: Command) {
+      if (command.day <= world.day) {
+        // Apply now, in submission order. Determinism is preserved because the
+        // caller submits in this same order; the Phase 2 log records it.
+        applyCommand(world, command);
+      } else {
+        world.queue.push(command);
+      }
     },
     enqueue(command: Command) {
       world.queue.push(command);

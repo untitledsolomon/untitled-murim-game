@@ -17,12 +17,14 @@ export interface PanelDef {
     enabled: boolean;
 }
 
-/** All panels reachable from the menu, opened as movable windows. */
+/** All panels reachable from the bottom nav. Enabled panels open their real
+ * content in the dock; disabled panels (content arrives in later phases) open
+ * the "Not yet available" stub. */
 export const PANELS: PanelDef[] = [
+    { id: "trade", title: "Trade", component: Trade, enabled: true },
+    { id: "town", title: "Town", component: Town, enabled: true },
     { id: "family", title: "You & family", component: Family, enabled: true },
     { id: "organization", title: "Organization", component: Organization, enabled: true },
-    { id: "town", title: "Town / district", component: Town, enabled: true },
-    { id: "trade", title: "Trade", component: Trade, enabled: true },
     { id: "information", title: "Information", component: Information, enabled: true },
     { id: "politics", title: "Politics", component: Politics, enabled: false },
     { id: "banking", title: "Banking", component: Banking, enabled: false },

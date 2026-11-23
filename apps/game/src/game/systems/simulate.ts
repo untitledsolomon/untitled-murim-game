@@ -25,10 +25,12 @@ export const SimulateSystem = {
         // Drop the backlog after a long paused-off frame, like the scheduler does.
         if (steps === MAX_DAYS_PER_FRAME) sim.accumulator = 0;
 
-        // Rebuild the UI snapshot only on a day change.
-        if (sim.publishedDay !== sim.game.world.day) {
+        // Rebuild the UI snapshot on a day change, or when forced (debug
+        // skips and the reveal-all toggle).
+        if (sim.publishedDay !== sim.game.world.day || sim.forcePublish) {
             sim.publishedDay = sim.game.world.day;
-            sim.snapshot = sim.game.snapshot();
+            sim.forcePublish = false;
+            sim.snapshot = sim.game.snapshot({ revealAll: sim.revealAll });
         }
     },
 };

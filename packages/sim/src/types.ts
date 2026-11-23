@@ -146,6 +146,16 @@ export interface Snapshot {
 
 /* ---------- Map modes and commands ---------- */
 
+/** Options for building a snapshot. */
+export interface SnapshotOptions {
+  /**
+   * When true, skip knowledge gating and reveal the whole world. Used by the
+   * debug "Reveal all" toggle. Never serialized. Fog arrives in Phase 5, so
+   * until then this flag is accepted but changes nothing.
+   */
+  revealAll?: boolean;
+}
+
 export type MapMode = "prices" | "crime" | "unrest" | "influence" | "knowledge";
 
 /** Who issued a command. Player and AI use the same command system. */

@@ -1,4 +1,10 @@
-/* Palette. Warm dark ink over parchment paper, with a gold accent. */
+/*
+ * Design tokens. Palette is warm dark ink over parchment paper with a gold
+ * accent. Body text is 14px; headings 16px; tertiary labels 12px. Spacing uses
+ * a 4/8/12/16/24 scale. Interactive elements have a minimum 32px click target
+ * and a visible focus ring (see base.css). Secondary text stays at or above
+ * WCAG AA contrast (4.5:1) against the ink background.
+ */
 :root {
     --ink: #0e0d0b;
     --ink-2: #191711;
@@ -7,7 +13,7 @@
     --line-strong: #4d463a;
     --paper: #efe6d5;
     --paper-dim: #968d7b;
-    --paper-faint: #6b6454;
+    --paper-faint: #8a8170;
     --gold: #c9a74d;
     --gold-dim: #8a7133;
     --ok: #7f9c5f;
@@ -18,8 +24,12 @@
     --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
     --panel-radius: 4px;
 
-    --z-topbar: 20;
-    --z-panels: 30;
-    --z-alerts: 40;
+    /* Stacking, bottom to top. */
     --z-dots: 10;
+    --z-nav: 16;
+    --z-topbar: 20;
+    --z-chrome: 22;
+    --z-dock: 28;
+    --z-alerts: 40;
+    --z-toast: 50;
 }

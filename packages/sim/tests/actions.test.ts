@@ -121,4 +121,29 @@ describe("commands", () => {
     game.step();
     expect(game.world.history[1]).toMatchObject({ kind: "trade-failed" });
   });
+
+  test("send applies a due command immediately, without a step", () => {
+    const game = createGame(15);
+    const at = game.snapshot().player.location!;
+    const before = game.snapshot().player.cash;
+    game.send({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "grain", at, quantity: 4 });
+    const after = game.snapshot();
+    expect(after.player.cash).toBeLessThan(before);
+    expect(after.player.stock.grain).toBeGreaterThanOrEqual(4);
+  });
+
+  test("send queues a future-dated command until its day", () => {
+    const game = createGame(16);
+    const at = game.snapshot().player.location!;
+    const before = game.snapshot().player.cash;
+    game.send({ id: "b", actor: { kind: "player" }, day: 5, kind: "buy", good: "grain", at, quantity: 2 });
+    expect(game.snapshot().player.cash).toBe(before);
+    game.step();
+    game.step();
+    game.step();
+    game.step();
+    game.step();
+    expect(game.snapshot().player.cash).toBeLessThan(before);
+    expect(game.snapshot().player.stock.grain).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { game } from "../lib/game-state.svelte";
+    import { TOPBAR_HEIGHT } from "../lib/layout";
 
     const kinds: Record<string, string> = {
         unrest: "Unrest",
@@ -14,7 +15,7 @@
 </script>
 
 {#if top.length > 0}
-    <div class="outliner" aria-label="Watch list">
+    <div class="outliner" aria-label="Watch list" style="top: calc({TOPBAR_HEIGHT}px + 6px);">
         <div class="heading">To watch</div>
         {#each top as item (item.id)}
             <div class="item" title={item.label}>
@@ -29,7 +30,6 @@
     .outliner {
         position: absolute;
         left: 12px;
-        bottom: 14px;
         width: 240px;
         background: var(--ink);
         border: 1px solid var(--line);

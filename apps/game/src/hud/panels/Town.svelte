@@ -1,7 +1,9 @@
 <script lang="ts">
     import { game } from "../lib/game-state.svelte";
-    import { selectTown } from "../hud-bridge";
     import { formatMoney } from "../lib/format";
+    import Button from "../components/ui/Button.svelte";
+    import EmptyState from "../components/ui/EmptyState.svelte";
+    import ExplainedNumber from "../components/ui/ExplainedNumber.svelte";
     import PanelFrame from "./PanelFrame.svelte";
 
     function townName(id: string): string {
@@ -11,62 +13,96 @@
     function goodsName(id: string): string {
         return game.snapshot?.goods.find((g) => g.id === id)?.name ?? id;
     }
+
+    function select(id: string): void {
+        game.selectTown(id);
+    }
+
+    function travelHere(to: string): void {
+        const snap = game.snapshot;
+        if (!snap || !snap.player.location) return;
+        game.sendCommand({
+            id: `ui-travel-${to}-${Date.now().toString(36)}`,
+            actor: { kind: "player" },
+            day: snap.day,
+            kind: "travel",
+            to,
+        });
+    }
+
+    function roundMoney(n: number): string {
+        return Math.round(n).toLocaleString("en-US");
+    }
 </script>
 
 {#if game.snapshot}
     {@const snap = game.snapshot}
     {@const town = snap.towns.find((t) => t.id === game.selectedTownId) ?? null}
+    {@const here = snap.player.location}
     <PanelFrame
         title={town ? `Town: ${town.name}` : "Town / district"}
         numbers={[
             { label: "Crime", value: town ? `${Math.round(town.crime * 100)}%` : "—", tone: town && town.crime > 0.5 ? "danger" : "default" },
             { label: "Unrest", value: town ? `${Math.round(town.unrest * 100)}%` : "—", tone: town && town.unrest > 0.5 ? "danger" : "default" },
         ]}
-        tabs={[{ id: "markets", label: "Markets" }]}
+        tabs={[{ id: "town", label: "Town" }]}
     >
         {#snippet content()}
             {#if town === null}
-                <p class="muted">Select a town on the map to inspect it.</p>
+                <EmptyState>Select a town on the map to inspect it.</EmptyState>
                 <ul class="towns">
                     {#each snap.towns as t (t.id)}
-                        <li>
-                            <button class="town-link" onclick={() => selectTown(t.id)}>{t.name}</button>
+                        <li class="town-row">
+                            <button class="town-link" onclick={() => select(t.id)}>{t.name}</button>
+                            <Button
+                                onclick={() => travelHere(t.id)}
+                                disabled={here === null || here === t.id}
+                                title={here === null ? "You are between towns" : here === t.id ? "You are already here" : "Travel here now"}
+                            >
+                                {here === t.id ? "Here" : "Travel"}
+                            </Button>
                         </li>
                     {/each}
                 </ul>
             {:else}
-                {#each Object.entries(town.goods) as [goodId, good] (goodId)}
+                <p class="where">
+                    {town.name}{town.id === here ? " — you are here." : ` — you are in ${here ? townName(here) : "transit"}.`}
+                </p>
+                {#each snap.goods as good (good.id)}
+                    {@const g = town.goods[good.id]!}
                     <div class="good-row">
-                        <span class="gname">{goodsName(goodId)}</span>
-                        <span class="gbase">base {Math.round(good.basePrice)}</span>
-                        <span class="gprice">market {formatMoney(good.market.value)}</span>
+                        <span class="gname">{goodsName(good.id)}</span>
+                        <span class="gbase">base {Math.round(g.basePrice)}</span>
+                        <ExplainedNumber price={g.market} format={roundMoney} showLabel={false} />
                     </div>
-                    {#if good.market.factors.length > 0}
-                        <ul class="factors">
-                            {#each good.market.factors as f (goodId + f.label)}
-                                <li><span>{f.label}</span><span class="amt">{f.amount > 0 ? "+" : ""}{Math.round(f.amount)}</span></li>
-                            {/each}
-                        </ul>
-                    {/if}
                 {/each}
+                {#if here !== town.id}
+                    <p class="travel-prompt">
+                        <Button onclick={() => travelHere(town.id)} disabled={here === null}>
+                            Travel to {town.name}
+                        </Button>
+                    </p>
+                {/if}
             {/if}
         {/snippet}
     </PanelFrame>
 {/if}
 
 <style>
-    .muted {
-        color: var(--paper-dim);
-        margin-top: 0;
-    }
-
     .towns {
         list-style: none;
         margin: 6px 0 0;
         padding: 0;
-        columns: 2;
-        column-gap: 16px;
-        font-size: 12px;
+        font-size: 13px;
+    }
+
+    .town-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 3px 0;
+        border-bottom: 1px solid var(--line);
     }
 
     .town-link {
@@ -75,6 +111,12 @@
 
     .town-link:hover {
         color: var(--gold);
+    }
+
+    .where {
+        margin: 0 0 6px;
+        font-size: 12px;
+        color: var(--paper-dim);
     }
 
     .good-row {
@@ -92,32 +134,12 @@
         flex: 1;
     }
 
-    .gbase,
-    .gprice {
+    .gbase {
         color: var(--paper-dim);
         font-variant-numeric: tabular-nums;
     }
 
-    .gprice {
-        color: var(--gold);
-    }
-
-    .factors {
-        list-style: none;
-        margin: 0;
-        padding: 2px 0 4px 12px;
-        font-size: 11px;
-        color: var(--paper-faint);
-    }
-
-    .factors li {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .amt {
-        color: var(--paper-dim);
-        font-variant-numeric: tabular-nums;
+    .travel-prompt {
+        margin: 10px 0 0;
     }
 </style>

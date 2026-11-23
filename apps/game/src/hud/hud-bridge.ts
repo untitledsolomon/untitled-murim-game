@@ -1,24 +1,60 @@
-// Connects engine-side map state to the reactive HUD store, and exposes the
-// HUD actions that must reach into the world resource.
-import { createGame } from "@murim/sim";
+// Connects engine-side map state to the reactive HUD store. This is the only
+// module (besides the engine plugin itself) that imports `@dylanebert/shallot`,
+// so it must never be imported by the standalone HUD route or the UI tests —
+// those run headless through `lib/persistence.ts` and the store's bridge hook.
 import type { World } from "@dylanebert/shallot";
 import { Viewports } from "@dylanebert/shallot";
-import type { MapMode, TownId } from "@murim/sim";
 import { MapUi, Simulation } from "../game/components";
 import { SPEEDS } from "../game/speeds";
-import { game, simRef } from "./lib/game-state.svelte";
+import { game, simRef, type EngineBridge } from "./lib/game-state.svelte";
 
 let worldRef: World | null = null;
 let raf = 0;
 
-const SEED_KEY = "murim-seed";
-
-function persistSeed(seed: number): void {
-    try {
-        localStorage.setItem(SEED_KEY, String(seed));
-    } catch {
-        /* private mode or storage full: a seed is only a convenience */
-    }
+/** Install the store's engine-coupling hook. No-op without a world. */
+function installBridge(): EngineBridge {
+    const bridge: EngineBridge = {
+        setMapMode: (mode) => {
+            if (!worldRef) return;
+            worldRef.resource(MapUi).mode = mode;
+        },
+        setPaused: (paused) => {
+            if (!worldRef) return;
+            if (paused) worldRef.pause();
+            else worldRef.resume();
+        },
+        setSpeed: (index) => {
+            worldRef?.setTimeScale(SPEEDS[index] ?? 1);
+        },
+        selectTown: (id) => {
+            if (worldRef) worldRef.resource(MapUi).selectedTownId = id;
+        },
+        setRevealAll: (reveal) => {
+            const res = worldRef?.resource(Simulation);
+            if (!res) return;
+            res.revealAll = reveal;
+            res.forcePublish = true;
+        },
+        step: (days) => {
+            const sim = simRef.current;
+            if (!sim) return;
+            for (let i = 0; i < days; i++) sim.step();
+            const res = worldRef?.resource(Simulation);
+            if (res) res.forcePublish = true;
+        },
+        // After a load or new game the engine resource still points at a stale
+        // Game object; re-point it and make the next simulate pass republish.
+        onSimReplaced: () => {
+            const res = worldRef?.resource(Simulation);
+            if (!res) return;
+            res.game = simRef.current;
+            res.forcePublish = true;
+            res.accumulator = 0;
+            if (worldRef) worldRef.resource(MapUi).selectedTownId = null;
+        },
+    };
+    game.bridge = bridge;
+    return bridge;
 }
 
 function poll(): void {
@@ -26,7 +62,7 @@ function poll(): void {
     if (world) {
         const ui = world.resource(MapUi);
         const sim = world.resource(Simulation);
-        game.snapshot = sim.snapshot;
+        if (sim.snapshot) game.publishSnapshot(sim.snapshot);
         game.mode = ui.mode;
         game.selectedTownId = ui.selectedTownId;
         game.townScreens = ui.screens;
@@ -40,6 +76,8 @@ function poll(): void {
         game.paused = world.time.paused;
         const index = (SPEEDS as readonly number[]).indexOf(world.time.scale);
         if (index >= 0) game.speedIndex = index;
+        // The prices-mode good is store-owned; the map reads it each frame.
+        if (ui.selectedGoodId !== game.selectedGoodId) ui.selectedGoodId = game.selectedGoodId;
     }
     raf = requestAnimationFrame(poll);
 }
@@ -47,66 +85,10 @@ function poll(): void {
 /** Start feeding the store from the engine; returns a stop function. */
 export function startBridge(world: World): () => void {
     worldRef = world;
+    installBridge();
     raf = requestAnimationFrame(poll);
     return () => {
         cancelAnimationFrame(raf);
         worldRef = null;
     };
-}
-
-export function selectTown(id: TownId | null): void {
-    if (!worldRef) return;
-    worldRef.resource(MapUi).selectedTownId = id;
-}
-
-export function setMapMode(mode: MapMode): void {
-    if (!worldRef) return;
-    worldRef.resource(MapUi).mode = mode;
-}
-
-export function setSpeed(index: number): void {
-    worldRef?.setTimeScale(SPEEDS[index] ?? 1);
-}
-
-export function setPaused(paused: boolean): void {
-    if (!worldRef) return;
-    if (paused) worldRef.pause();
-    else worldRef.resume();
-}
-
-export function save(): string | null {
-    const sim = simRef.current;
-    if (!sim) return null;
-    persistSeed(sim.world.seed);
-    return sim.serialize();
-}
-
-export function load(text: string): boolean {
-    const sim = simRef.current;
-    const world = worldRef;
-    if (!sim || !world) return false;
-    try {
-        sim.load(text);
-        persistSeed(sim.world.seed);
-    } catch {
-        return false;
-    }
-    // Force the next simulate pass to publish a fresh snapshot.
-    const res = world.resource(Simulation);
-    res.publishedDay = -1;
-    res.accumulator = 0;
-    return true;
-}
-
-export function newGame(seed: number): void {
-    const world = worldRef;
-    if (!world) return;
-    const fresh = createGame(seed);
-    simRef.current = fresh;
-    persistSeed(seed);
-    const res = world.resource(Simulation);
-    res.game = fresh;
-    res.publishedDay = -1;
-    res.accumulator = 0;
-    world.resource(MapUi).selectedTownId = null;
 }

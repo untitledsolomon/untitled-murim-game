@@ -7,7 +7,7 @@
     "dev": "bun --cwd apps/game dev",
     "build": "bun --cwd apps/game build",
     "preview": "bun --cwd apps/game preview",
-    "test": "bun --cwd packages/sim test",
+    "test": "bun --cwd packages/sim test && bun --cwd apps/game test",
     "typecheck": "bun --cwd packages/sim typecheck && bun --cwd apps/game typecheck"
   }
 }

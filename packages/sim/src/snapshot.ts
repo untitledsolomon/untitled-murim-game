@@ -10,6 +10,7 @@ import {
   type PersonSnapshot,
   type Price,
   type Snapshot,
+  type SnapshotOptions,
   type TownSnapshot,
 } from "./types";
 
@@ -17,7 +18,7 @@ import {
  * A pure read of the world into the shapes the UI binds to.
  * Called when a day rolls over, never mid-frame.
  */
-export function buildSnapshot(world: World): Snapshot {
+export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snapshot {
   const people: Record<string, PersonSnapshot> = {};
   for (const personId of Object.keys(world.people)) {
     const person = world.people[personId]!;

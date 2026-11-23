@@ -1,9 +1,9 @@
 // Pure camera geometry for the top-down map. No engine imports: this module is
 // shared by the engine systems and the DOM overlay so both see the same numbers.
 import { WORLD_SIZE } from "@murim/sim";
-import { MINIMAP_MARGIN } from "../hud/lib/layout";
+import { MINIMAP_MARGIN, MINIMAP_SIZE } from "../hud/lib/layout";
 
-export { MINIMAP_MARGIN };
+export { MINIMAP_MARGIN, MINIMAP_SIZE };
 
 /** Height of the main camera above the sim plane (y = 0). */
 export const CAMERA_HEIGHT = 260;
@@ -22,8 +22,6 @@ export const ZOOM_MIN = 60;
 /** Largest orthographic view size, a few world-wraps wide. */
 export const ZOOM_MAX = WORLD_SIZE * 4;
 
-/** Cap for the minimap frame; its margin from the canvas edge lives in layout. */
-export const MINIMAP_SIZE = 224;
 /** Height of the minimap's camera-position indicator above the sim plane. */
 export const VIEW_MARKER_HEIGHT = 0.8;
 

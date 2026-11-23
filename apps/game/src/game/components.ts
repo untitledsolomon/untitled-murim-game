@@ -18,10 +18,21 @@ export interface SimulationData {
     snapshot: Snapshot | null;
     /** The day the latest snapshot was published for. */
     publishedDay: number;
+    /** Debug "reveal all": lifted into the snapshot builder, never stored. */
+    revealAll: boolean;
+    /** Set to republish the snapshot even when the day did not roll over. */
+    forcePublish: boolean;
 }
 
 export const Simulation: Resource<SimulationData> = {
-    create: () => ({ game: null, accumulator: 0, snapshot: null, publishedDay: -1 }),
+    create: () => ({
+        game: null,
+        accumulator: 0,
+        snapshot: null,
+        publishedDay: -1,
+        revealAll: false,
+        forcePublish: false,
+    }),
 };
 
 export interface MapUiData {
@@ -31,6 +42,8 @@ export interface MapUiData {
     zoom: number;
     /** Active map coloring mode. */
     mode: MapMode;
+    /** The good the prices mode colours by. */
+    selectedGoodId: string;
     selectedTownId: TownId | null;
     cameraEntity: number;
     ringEntity: number;
@@ -43,8 +56,9 @@ export interface MapUiData {
     townByEid: Map<number, TownId>;
     /** Projected marker positions, refreshed each drawn frame. */
     screens: TownScreen[];
-    /** Gates marker recoloring: recolor only when mode or day changes. */
+    /** Gates marker recoloring: recolor only when mode, good, or day changes. */
     lastMode: string;
+    lastGood: string;
     lastDay: number;
 }
 
@@ -53,6 +67,7 @@ export const MapUi: Resource<MapUiData> = {
         center: [110, 110],
         zoom: 220,
         mode: "prices",
+        selectedGoodId: "salt",
         selectedTownId: null,
         cameraEntity: -1,
         ringEntity: -1,
@@ -63,6 +78,7 @@ export const MapUi: Resource<MapUiData> = {
         townByEid: new Map<number, TownId>(),
         screens: [],
         lastMode: "",
+        lastGood: "",
         lastDay: -1,
     }),
 };
