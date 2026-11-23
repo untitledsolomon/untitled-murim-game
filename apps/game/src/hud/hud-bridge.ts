@@ -11,6 +11,16 @@ import { game, simRef } from "./lib/game-state.svelte";
 let worldRef: World | null = null;
 let raf = 0;
 
+const SEED_KEY = "murim-seed";
+
+function persistSeed(seed: number): void {
+    try {
+        localStorage.setItem(SEED_KEY, String(seed));
+    } catch {
+        /* private mode or storage full: a seed is only a convenience */
+    }
+}
+
 function poll(): void {
     const world = worldRef;
     if (world) {
@@ -65,7 +75,10 @@ export function setPaused(paused: boolean): void {
 }
 
 export function save(): string | null {
-    return simRef.current?.serialize() ?? null;
+    const sim = simRef.current;
+    if (!sim) return null;
+    persistSeed(sim.world.seed);
+    return sim.serialize();
 }
 
 export function load(text: string): boolean {
@@ -74,6 +87,7 @@ export function load(text: string): boolean {
     if (!sim || !world) return false;
     try {
         sim.load(text);
+        persistSeed(sim.world.seed);
     } catch {
         return false;
     }
@@ -89,6 +103,7 @@ export function newGame(seed: number): void {
     if (!world) return;
     const fresh = createGame(seed);
     simRef.current = fresh;
+    persistSeed(seed);
     const res = world.resource(Simulation);
     res.game = fresh;
     res.publishedDay = -1;
