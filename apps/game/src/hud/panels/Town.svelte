@@ -21,13 +21,7 @@
     function travelHere(to: string): void {
         const snap = game.snapshot;
         if (!snap || !snap.player.location) return;
-        game.sendCommand({
-            id: `ui-travel-${to}-${Date.now().toString(36)}`,
-            actor: { kind: "player" },
-            day: snap.day,
-            kind: "travel",
-            to,
-        });
+        game.sendCommand({ kind: "player" }, { kind: "travel", to });
     }
 
     function roundMoney(n: number): string {

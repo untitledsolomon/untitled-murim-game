@@ -1,7 +1,8 @@
 import { createRng } from "./rng";
 import type { World } from "./state";
 
-const FORMAT_VERSION = 2;
+// Phase 1 set format 2; Phase 2 adds `world.commandLog` and `Outcome.actorId`.
+const FORMAT_VERSION = 3;
 
 /**
  * Serialize the world to a string that restores it exactly. The RNG state is

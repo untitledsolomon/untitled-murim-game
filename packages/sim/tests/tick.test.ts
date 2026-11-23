@@ -37,7 +37,7 @@ describe("tick", () => {
     const game = createGame(44);
     const home = game.snapshot().player.location!;
     const target = game.snapshot().towns.find((t) => t.id !== home)!.id;
-    game.enqueue({ id: "later", actor: { kind: "player" }, day: 10, kind: "travel", to: target });
+    game.send({ kind: "player" }, { kind: "travel", to: target, day: 10 });
     game.step(); // day 1
     expect(game.snapshot().player.location).toBe(home);
     for (let i = 0; i < 12; i++) game.step();

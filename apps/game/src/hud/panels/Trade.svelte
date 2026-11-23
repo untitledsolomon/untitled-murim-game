@@ -13,17 +13,9 @@
         const snap = game.snapshot;
         if (!snap || !snap.player.location) return;
         const quantity = Math.max(1, Math.floor(qty[goodId] ?? 1));
-        // Commands are the single shared interface; the sim applies a due
-        // command immediately, so the HUD reflects the trade at once.
-        game.sendCommand({
-            id: `ui-${kind}-${goodId}-${Date.now().toString(36)}`,
-            actor: { kind: "player" },
-            day: snap.day,
-            kind,
-            good: goodId,
-            at: snap.player.location,
-            quantity,
-        });
+        // Commands are the single shared interface; the sim assigns the id and
+        // applies a due command immediately, so the HUD reflects the trade at once.
+        game.sendCommand({ kind: "player" }, { kind, good: goodId, at: snap.player.location, quantity });
     }
 
     function roundMoney(n: number): string {

@@ -94,6 +94,8 @@ export interface PersonSnapshot {
   name: string;
   age: number;
   location: TownId | null;
+  /** Relative to the player, when this person is family. */
+  familyRole?: "spouse" | "child" | "parent";
 }
 
 export interface Measures {
@@ -129,6 +131,15 @@ export interface PlayerSnapshot {
   cash: number;
   stock: Record<GoodId, number>;
   family: PersonSnapshot[];
+  /** The player's own recent outcomes, newest first. NPC activity is absent. */
+  ledger: LedgerEntry[];
+}
+
+/** One entry in the player's book of own actions. */
+export interface LedgerEntry {
+  day: DayNumber;
+  text: string;
+  kind: string;
 }
 
 export interface Snapshot {
@@ -175,3 +186,23 @@ export type Command =
   | (CommandBase & { kind: "travel"; to: TownId })
   | (CommandBase & { kind: "buy"; good: GoodId; at: TownId; quantity: number })
   | (CommandBase & { kind: "sell"; good: GoodId; at: TownId; quantity: number });
+
+/**
+ * The body of a command, without the id, actor, or execution day. The day is
+ * optional and defaults to the current sim day, which makes it apply
+ * immediately. `Game.send` fills in the id and day and logs the submission.
+ */
+export type CommandSpec =
+  | ({ day?: DayNumber } & { kind: "travel"; to: TownId })
+  | ({ day?: DayNumber } & { kind: "buy"; good: GoodId; at: TownId; quantity: number })
+  | ({ day?: DayNumber } & { kind: "sell"; good: GoodId; at: TownId; quantity: number });
+
+/** One submitted command as recorded for replay, in submission order. */
+export interface CommandLogEntry {
+  /** The sim day at submission time (world.day before the command runs). */
+  day: DayNumber;
+  /** Submission order, matching the number inside the command id. */
+  order: number;
+  /** The full command, including the assigned id and execution day. */
+  command: Command;
+}

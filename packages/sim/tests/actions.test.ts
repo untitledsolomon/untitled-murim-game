@@ -7,8 +7,7 @@ describe("commands", () => {
     const towns = game.snapshot().towns;
     const home = game.snapshot().player.location;
     const target = towns.find((t) => t.id !== home)!.id;
-    game.enqueue({ id: "t", actor: { kind: "player" }, day: 0, kind: "travel", to: target });
-    game.step();
+    game.send({ kind: "player" }, { kind: "travel", to: target });
     expect(game.snapshot().player.location).toBe(target);
   });
 
@@ -16,31 +15,27 @@ describe("commands", () => {
     const game = createGame(2);
     const at = game.snapshot().player.location!;
     const before = game.snapshot().player.cash;
-    game.enqueue({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "grain", at, quantity: 5 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "buy", good: "grain", at, quantity: 5 });
     const afterBuy = game.snapshot();
     expect(afterBuy.player.cash).toBeLessThan(before);
     expect(afterBuy.player.stock.grain).toBeGreaterThanOrEqual(5);
 
-    game.enqueue({ id: "s", actor: { kind: "player" }, day: 0, kind: "sell", good: "grain", at, quantity: 3 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "sell", good: "grain", at, quantity: 3 });
     const afterSell = game.snapshot();
     expect(afterSell.player.stock.grain).toBeLessThan(afterBuy.player.stock.grain);
     expect(afterSell.player.cash).toBeGreaterThan(afterBuy.player.cash);
   });
 
-  test("commands execute in FIFO order within a day", () => {
+  test("commands execute in submission order within a day", () => {
     const game = createGame(3);
     const at = game.snapshot().player.location!;
     // Sell before buying the same good: the sell finds no stock and fails first.
-    game.enqueue({ id: "s", actor: { kind: "player" }, day: 0, kind: "sell", good: "iron", at, quantity: 2 });
-    game.enqueue({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "iron", at, quantity: 2 });
-    game.step();
-    const history = game.snapshot();
+    game.send({ kind: "player" }, { kind: "sell", good: "iron", at, quantity: 2 });
+    game.send({ kind: "player" }, { kind: "buy", good: "iron", at, quantity: 2 });
     expect(game.world.history.length).toBeGreaterThanOrEqual(2);
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
     expect(game.world.history[1]).toMatchObject({ kind: "trade" });
-    expect(history.player.stock.iron).toBe(2);
+    expect(game.snapshot().player.stock.iron).toBe(2);
   });
 
   test("unimplemented commands are gone; unknown kinds cannot be enqueued", () => {
@@ -58,8 +53,7 @@ describe("commands", () => {
     const headId = org.memberIds[0]!;
     const headLocation = game.world.people[headId]!.location;
     const target = game.snapshot().towns.find((t) => t.id !== headLocation)!.id;
-    game.enqueue({ id: "o", actor: { kind: "organization", id: org.id }, day: 0, kind: "travel", to: target });
-    game.step();
+    game.send({ kind: "organization", id: org.id }, { kind: "travel", to: target });
     expect(game.world.people[headId]!.location).toBe(target);
     expect(game.world.history[0]).toMatchObject({ kind: "travel" });
   });
@@ -70,17 +64,15 @@ describe("commands", () => {
     const personId = person.memberIds[1]!;
     const location = game.world.people[personId]!.location;
     const target = game.snapshot().towns.find((t) => t.id !== location)!.id;
-    game.enqueue({ id: "p", actor: { kind: "person", id: personId }, day: 0, kind: "travel", to: target });
-    game.step();
+    game.send({ kind: "person", id: personId }, { kind: "travel", to: target });
     expect(game.world.people[personId]!.location).toBe(target);
   });
 
   test("missing organizations and persons fail cleanly", () => {
     const game = createGame(10);
     const at = game.snapshot().player.location!;
-    game.enqueue({ id: "x", actor: { kind: "person", id: "person-999999" }, day: 0, kind: "buy", good: "grain", at, quantity: 1 });
-    game.enqueue({ id: "y", actor: { kind: "organization", id: "org-999999" }, day: 0, kind: "buy", good: "grain", at, quantity: 1 });
-    game.step();
+    game.send({ kind: "person", id: "person-999999" }, { kind: "buy", good: "grain", at, quantity: 1 });
+    game.send({ kind: "organization", id: "org-999999" }, { kind: "buy", good: "grain", at, quantity: 1 });
     expect(game.world.history).toHaveLength(2);
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
     expect(game.world.history[1]).toMatchObject({ kind: "trade-failed" });
@@ -89,24 +81,21 @@ describe("commands", () => {
   test("buying an invalid quantity fails cleanly", () => {
     const game = createGame(11);
     const at = game.snapshot().player.location!;
-    game.enqueue({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "grain", at, quantity: 0 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "buy", good: "grain", at, quantity: 0 });
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
   });
 
   test("selling goods you do not hold fails cleanly", () => {
     const game = createGame(12);
     const at = game.snapshot().player.location!;
-    game.enqueue({ id: "s", actor: { kind: "player" }, day: 0, kind: "sell", good: "iron", at, quantity: 5 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "sell", good: "iron", at, quantity: 5 });
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
   });
 
   test("buying beyond your cash fails cleanly", () => {
     const game = createGame(13);
     const at = game.snapshot().player.location!;
-    game.enqueue({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "salt", at, quantity: 1_000_000 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "buy", good: "salt", at, quantity: 1_000_000 });
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
   });
 
@@ -115,9 +104,8 @@ describe("commands", () => {
     const towns = game.snapshot().towns;
     const home = game.snapshot().player.location!;
     const other = towns.find((t) => t.id !== home)!.id;
-    game.enqueue({ id: "t", actor: { kind: "player" }, day: 0, kind: "travel", to: other });
-    game.enqueue({ id: "b", actor: { kind: "player" }, day: 1, kind: "buy", good: "grain", at: home, quantity: 1 });
-    game.step();
+    game.send({ kind: "player" }, { kind: "travel", to: other });
+    game.send({ kind: "player" }, { kind: "buy", good: "grain", at: home, quantity: 1, day: 1 });
     game.step();
     expect(game.world.history[1]).toMatchObject({ kind: "trade-failed" });
   });
@@ -126,7 +114,7 @@ describe("commands", () => {
     const game = createGame(15);
     const at = game.snapshot().player.location!;
     const before = game.snapshot().player.cash;
-    game.send({ id: "b", actor: { kind: "player" }, day: 0, kind: "buy", good: "grain", at, quantity: 4 });
+    game.send({ kind: "player" }, { kind: "buy", good: "grain", at, quantity: 4 });
     const after = game.snapshot();
     expect(after.player.cash).toBeLessThan(before);
     expect(after.player.stock.grain).toBeGreaterThanOrEqual(4);
@@ -136,7 +124,7 @@ describe("commands", () => {
     const game = createGame(16);
     const at = game.snapshot().player.location!;
     const before = game.snapshot().player.cash;
-    game.send({ id: "b", actor: { kind: "player" }, day: 5, kind: "buy", good: "grain", at, quantity: 2 });
+    game.send({ kind: "player" }, { kind: "buy", good: "grain", at, quantity: 2, day: 5 });
     expect(game.snapshot().player.cash).toBe(before);
     game.step();
     game.step();

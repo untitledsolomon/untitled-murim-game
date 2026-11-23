@@ -41,6 +41,7 @@ export function generateWorld(seed: number): World {
     markets: {},
     player: { personId: "person-0", background: "Merchant's heir", familyIds: [] },
     queue: [],
+    commandLog: [],
     history: [],
     alerts: [],
     rng,

@@ -22,10 +22,22 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
   const people: Record<string, PersonSnapshot> = {};
   for (const personId of Object.keys(world.people)) {
     const person = world.people[personId]!;
-    people[personId] = { id: person.id, name: person.name, age: ageOf(world, person), location: person.location };
+    const snapshot: PersonSnapshot = {
+      id: person.id,
+      name: person.name,
+      age: ageOf(world, person),
+      location: person.location,
+    };
+    if (person.familyRole !== undefined) snapshot.familyRole = person.familyRole;
+    people[personId] = snapshot;
   }
 
   const player = world.people[world.player.personId]!;
+  const ledger: Snapshot["player"]["ledger"] = world.history
+    .filter((outcome) => outcome.actorId === player.id)
+    .slice(-30)
+    .reverse()
+    .map((outcome) => ({ day: outcome.day, text: outcome.text, kind: outcome.kind }));
 
   const counties: CountySnapshot[] = world.counties.map((county) => ({
     id: county.id,
@@ -103,6 +115,7 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
       cash: round(player.wealth),
       stock: { ...player.stock },
       family,
+      ledger,
     },
     counties,
     towns,

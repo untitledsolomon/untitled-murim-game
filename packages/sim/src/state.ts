@@ -2,6 +2,7 @@ import { DAYS_PER_YEAR } from "./constants";
 import type { Rng } from "./rng";
 import type {
   Command,
+  CommandLogEntry,
   DayNumber,
   GoodId,
   OrganizationId,
@@ -71,6 +72,8 @@ export interface MarketEntry {
 
 export interface Outcome {
   day: DayNumber;
+  /** The person who acted; null when the actor could not be resolved. */
+  actorId: PersonId | null;
   text: string;
   kind: string;
 }
@@ -105,6 +108,8 @@ export interface World {
   player: PlayerState;
   /** Pending commands from the player and from AI, in submission order. */
   queue: Command[];
+  /** Every command submitted through `Game.send`, for replay. Append-only. */
+  commandLog: CommandLogEntry[];
   /** A full log of every command outcome the player may inspect. */
   history: Outcome[];
   /** Recent alerts for the feed. Newest first. */

@@ -1,16 +1,9 @@
 import { marketPriceValue, sellPrice } from "./pricing";
 import { personStock, type Person, type World } from "./state";
-import type { ActorRef, Command, TownId } from "./types";
+import type { ActorRef, Command, CommandSpec, PersonId, TownId } from "./types";
 
-/** The command queue is a plain list; each command names the day it executes. */
-export type Queue = Command[];
-
-export function enqueue(world: World, command: Command): void {
-  world.queue.push(command);
-}
-
-function recordOutcome(world: World, text: string, kind: string): void {
-  world.history.push({ day: world.day, text, kind });
+function recordOutcome(world: World, actorId: PersonId | null, text: string, kind: string): void {
+  world.history.push({ day: world.day, actorId, text, kind });
   if (world.history.length > 500) world.history.shift();
 }
 
@@ -41,8 +34,14 @@ function resolveActorPerson(world: World, actor: ActorRef): Person {
 }
 
 /** Fail a command with a typed outcome; no state is changed by the caller. */
-function failOutcome(world: World, actorLabel: string, text: string, kind: "trade-failed" | "travel-failed"): void {
-  recordOutcome(world, `${actorLabel} ${text}`, kind);
+function failOutcome(
+  world: World,
+  actorId: PersonId | null,
+  actorLabel: string,
+  text: string,
+  kind: "trade-failed" | "travel-failed",
+): void {
+  recordOutcome(world, actorId, `${actorLabel} ${text}`, kind);
 }
 
 function validQuantity(quantity: number): boolean {
@@ -62,32 +61,33 @@ export function applyCommand(world: World, command: Command): void {
   switch (command.kind) {
     case "travel": {
       if (command.to === person.location) {
-        failOutcome(world, actorLabel, `is already in ${townName(world, command.to)}.`, "travel-failed");
+        failOutcome(world, person.id, actorLabel, `is already in ${townName(world, command.to)}.`, "travel-failed");
         break;
       }
       person.location = command.to;
-      recordOutcome(world, `${actorLabel} travels to ${townName(world, command.to)}.`, "travel");
+      recordOutcome(world, person.id, `${actorLabel} travels to ${townName(world, command.to)}.`, "travel");
       break;
     }
     case "buy": {
       if (!validQuantity(command.quantity)) {
-        failOutcome(world, actorLabel, `tried to buy an invalid quantity of ${command.good}.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `tried to buy an invalid quantity of ${command.good}.`, "trade-failed");
         break;
       }
       if (person.location !== command.at) {
-        failOutcome(world, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
         break;
       }
       const price = marketPriceValue(world, command.at, command.good);
       const cost = price * command.quantity;
       if (cost > person.wealth) {
-        failOutcome(world, actorLabel, `lacks cash to buy ${command.quantity} ${command.good}.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `lacks cash to buy ${command.quantity} ${command.good}.`, "trade-failed");
         break;
       }
       person.wealth -= cost;
       person.stock[command.good] = personStock(person, command.good) + command.quantity;
       recordOutcome(
         world,
+        person.id,
         `${actorLabel} buys ${command.quantity} ${command.good} at ${townName(world, command.at)} for ${cost.toFixed(1)} cash.`,
         "trade",
       );
@@ -95,17 +95,17 @@ export function applyCommand(world: World, command: Command): void {
     }
     case "sell": {
       if (!validQuantity(command.quantity)) {
-        failOutcome(world, actorLabel, `tried to sell an invalid quantity of ${command.good}.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `tried to sell an invalid quantity of ${command.good}.`, "trade-failed");
         break;
       }
       if (person.location !== command.at) {
-        failOutcome(world, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `cannot trade in ${townName(world, command.at)} from elsewhere.`, "trade-failed");
         break;
       }
       const held = personStock(person, command.good);
       const amount = Math.min(command.quantity, held);
       if (amount <= 0) {
-        failOutcome(world, actorLabel, `has no ${command.good} to sell.`, "trade-failed");
+        failOutcome(world, person.id, actorLabel, `has no ${command.good} to sell.`, "trade-failed");
         break;
       }
       const price = sellPrice(world, command.at, command.good).value;
@@ -114,6 +114,7 @@ export function applyCommand(world: World, command: Command): void {
       person.wealth += gains;
       recordOutcome(
         world,
+        person.id,
         `${actorLabel} sells ${amount} ${command.good} at ${townName(world, command.at)} for ${gains.toFixed(1)} cash.`,
         "trade",
       );
@@ -131,8 +132,25 @@ function resolveActorOrFail(world: World, command: Command): Person | null {
     return resolveActorPerson(world, command.actor);
   } catch {
     const failureKind = command.kind === "travel" ? "travel-failed" : "trade-failed";
-    failOutcome(world, actorLabelFor(world, command.actor), "cannot act: the actor is unknown.", failureKind);
+    // The actor could not be resolved, so there is no person to credit. The
+    // null actorId never matches the player, keeping the ledger honest.
+    failOutcome(world, null, actorLabelFor(world, command.actor), "cannot act: the actor is unknown.", failureKind);
     return null;
+  }
+}
+
+/**
+ * Strip a full command back to the spec a caller would submit, so a recorded
+ * command can be submitted again through `Game.send` (replay).
+ */
+export function commandSpec(command: Command): CommandSpec {
+  switch (command.kind) {
+    case "travel":
+      return { kind: "travel", to: command.to, day: command.day };
+    case "buy":
+      return { kind: "buy", good: command.good, at: command.at, quantity: command.quantity, day: command.day };
+    case "sell":
+      return { kind: "sell", good: command.good, at: command.at, quantity: command.quantity, day: command.day };
   }
 }
 

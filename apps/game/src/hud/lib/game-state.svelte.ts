@@ -13,7 +13,7 @@
 // fields are individually `$state` and whose snapshot is `$state.raw` (replaced
 // whole on each publish; the assigned object is not proxied, keeping the
 // per-frame cost of a fresh snapshot flat).
-import type { Command, Game, MapMode, Snapshot, TownId } from "@murim/sim";
+import type { ActorRef, CommandSpec, Game, MapMode, Snapshot, TownId } from "@murim/sim";
 import { SPEEDS, type Speed } from "../../game/speeds";
 
 export { SPEEDS, type Speed };
@@ -119,13 +119,14 @@ class GameState {
     toastSeq = 0;
     lastAlertId: string | undefined;
 
-    /** Submit a command for the player (or AI in later phases). Sends it to the
-     * sim, which applies a due command immediately — the game reacts even while
-     * paused — then republishes so the HUD reflects the change at once. */
-    sendCommand(command: Command): void {
+    /** Submit a command for the player (or AI in later phases). Routes through
+     * `Game.send`, which assigns the id, applies a due command immediately —
+     * the game reacts even while paused — and republishes so the HUD reflects
+     * the change at once. */
+    sendCommand(actor: ActorRef, spec: CommandSpec): void {
         const sim = simRef.current;
         if (!sim) return;
-        sim.send(command);
+        sim.send(actor, spec);
         this.publishSnapshot(sim.snapshot({ revealAll: this.revealAll }));
     }
 

@@ -31,6 +31,31 @@ ask unless truly blocked. Entries are newest first.
 - **Pan cannot lose the map.** The camera center is clamped to just past the
   world edge; the map cannot be dragged off into empty space.
 
+## Phase 2 — actors, commands, time
+
+- **`Game.send(actor, spec)` is the single entry point for commands.** The old
+  `send(command)`/`enqueue(command)` pair is gone. `send` assigns
+  `id = cmd-${counters.command++}` (so the id embeds the submission order),
+  defaults `day = world.day`, applies a command that is already due
+  synchronously in submission order (a paused game reacts instantly), and
+  queues a future-dated one for its day. Player and AI go through the same
+  method, so ordering and determinism have exactly one implementation.
+- **Every submission is logged for replay.** `send` appends
+  `{ day: world.day, order, command }` to `world.commandLog`, which is part of
+  the serialized world. Replay is then self-contained: read the log, re-submit
+  each entry through `send`, get the identical state. The log grows with the
+  run; when NPC traders arrive in Phase 4b and pre-history runs in Phase 6,
+  revisit the size (cap it or keep it out of the save) before it bloats saves.
+- **`Outcome.actorId` is the acting person's id.** The snapshot's
+  `player.ledger` is the player's last ≤30 outcomes, filtered by that id and
+  newest first — NPC activity stays in `world.history` but never leaks into the
+  ledger. Failures caused by the player's own commands carry the player id (so
+  the player sees why a trade failed); failures of an unresolvable actor carry
+  `null`, which never matches the player.
+- **`FORMAT_VERSION` 2 → 3.** The world shape changed (`commandLog`,
+  `Outcome.actorId`, `PersonSnapshot.familyRole`), so old saves are rejected
+  with the clear "unsupported save format" message. No migration.
+
 ## Phase 1b — UI foundation
 
 - **The broken-menu root cause was `$state.raw`, not the menu logic.** The
