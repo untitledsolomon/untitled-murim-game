@@ -106,7 +106,9 @@ describe("commands", () => {
   test("buying beyond your cash fails cleanly", () => {
     const game = createGame(13);
     const at = game.snapshot().player.location!;
-    game.send({ kind: "player" }, { kind: "buy", good: "salt", at, quantity: 1_000_000 });
+    // The home market is a populous town, so it holds enough tea that buying
+    // the whole stock costs more than the player's 200 starting cash.
+    game.send({ kind: "player" }, { kind: "buy", good: "tea", at, quantity: 1_000_000 });
     expect(game.world.history[0]).toMatchObject({ kind: "trade-failed" });
   });
 

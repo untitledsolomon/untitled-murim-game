@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createGame } from "../src/index";
+import { createGame, stockMultiplier } from "../src/index";
 
 describe("tick", () => {
   test("advances the calendar one day at a time", () => {
@@ -9,16 +9,23 @@ describe("tick", () => {
     expect(game.snapshot().day).toBe(start + 1);
   });
 
-  test("prices drift but stay within the model bounds", () => {
+  test("the stock economy stays in bounds: never negative, prices within the model range", () => {
     const game = createGame(22);
     for (let i = 0; i < 60; i++) game.step();
     const snapshot = game.snapshot();
     for (const town of snapshot.towns) {
       for (const goodId of Object.keys(town.goods)) {
         const entry = town.goods[goodId]!;
-        expect(entry.trend).toBeGreaterThan(-0.31);
-        expect(entry.trend).toBeLessThan(0.31);
+        expect(Number.isFinite(entry.stock)).toBe(true);
+        expect(entry.stock).toBeGreaterThanOrEqual(0);
         expect(entry.market.value).toBeGreaterThan(0);
+        // The model multiplier is clamped to [0.4, 3]; the displayed price is
+        // base times that multiplier, rounded to two decimals by sumFactors.
+        const modelMult = stockMultiplier(game.world.markets[town.id]![goodId]!);
+        expect(modelMult).toBeGreaterThanOrEqual(0.4);
+        expect(modelMult).toBeLessThanOrEqual(3.0);
+        expect(entry.market.value).toBeGreaterThanOrEqual(entry.basePrice * 0.4 - 0.01);
+        expect(entry.market.value).toBeLessThanOrEqual(entry.basePrice * 3.0 + 0.01);
         expect(entry.market.factors.length).toBeGreaterThanOrEqual(2);
       }
     }

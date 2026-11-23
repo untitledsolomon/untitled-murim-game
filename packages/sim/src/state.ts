@@ -56,6 +56,8 @@ export interface Town {
   name: string;
   position: Vector2;
   magistrateId: PersonId;
+  /** How many people live and eat here; drives consumption and labor. */
+  population: number;
   crime: number;
   unrest: number;
 }
@@ -80,10 +82,20 @@ export interface Organization {
 }
 
 export interface MarketEntry {
-  /** Long-run price anchor for this good in this town. */
+  /**
+   * Price anchor for this good in this town: the global base price times at
+   * most a ±5% transport offset. Deliberately near-global, so price gaps come
+   * from stock, not from permanent per-town base differences.
+   */
   base: number;
-  /** Current drift as a fraction of the base price. */
-  trend: number;
+  /** Units of the good the town market currently holds. */
+  stock: number;
+  /** Units the town produces each day (0 when it is not a producer). */
+  production: number;
+  /** Units the town's people consume each day. */
+  dailyConsumption: number;
+  /** Desired stock: this many days of local consumption held in reserve. */
+  target: number;
 }
 
 /** A road between two towns. Travel costs time and a toll. */

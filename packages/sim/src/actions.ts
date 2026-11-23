@@ -1,6 +1,6 @@
-import { CARRY_CAPACITY, goodWeight } from "./constants";
+import { CARRY_CAPACITY, goodLabel, goodWeight } from "./constants";
 import { shortestPath } from "./paths";
-import { marketPriceValue, sellPrice } from "./pricing";
+import { quoteBuy, quoteSell } from "./pricing";
 import { personStock, type Person, type World } from "./state";
 import type { ActorRef, Command, CommandSpec, PersonId, TownId } from "./types";
 
@@ -122,18 +122,38 @@ export function applyCommand(world: World, command: Command): void {
         );
         break;
       }
-      const price = marketPriceValue(world, command.at, command.good);
-      const cost = price * command.quantity;
-      if (cost > person.wealth) {
-        failOutcome(world, person.id, actorLabel, `lacks cash to buy ${command.quantity} ${command.good}.`, "trade-failed");
+      // The market sells only what it holds; a larger request buys what is there.
+      const entry = world.markets[command.at]?.[command.good];
+      const available = Math.floor(entry?.stock ?? 0);
+      const quantity = Math.min(command.quantity, available);
+      if (quantity < 1) {
+        failOutcome(
+          world,
+          person.id,
+          actorLabel,
+          `cannot buy ${goodLabel(command.good)}: ${townName(world, command.at)} has none in its market.`,
+          "trade-failed",
+        );
         break;
       }
-      person.wealth -= cost;
-      person.stock[command.good] = personStock(person, command.good) + command.quantity;
+      const quote = quoteBuy(world, command.at, command.good, quantity);
+      if (quote.value > person.wealth) {
+        failOutcome(
+          world,
+          person.id,
+          actorLabel,
+          `lacks the ${quote.value.toFixed(1)} cash to buy ${quantity} ${command.good}.`,
+          "trade-failed",
+        );
+        break;
+      }
+      person.wealth -= quote.value;
+      person.stock[command.good] = personStock(person, command.good) + quantity;
+      entry.stock -= quantity;
       recordOutcome(
         world,
         person.id,
-        `${actorLabel} buys ${command.quantity} ${command.good} at ${townName(world, command.at)} for ${cost.toFixed(1)} cash.`,
+        `${actorLabel} buys ${quantity} ${command.good} at ${townName(world, command.at)} for ${quote.value.toFixed(1)} cash.`,
         "trade",
       );
       break;
@@ -153,10 +173,13 @@ export function applyCommand(world: World, command: Command): void {
         failOutcome(world, person.id, actorLabel, `has no ${command.good} to sell.`, "trade-failed");
         break;
       }
-      const price = sellPrice(world, command.at, command.good).value;
-      const gains = price * amount;
+      const quote = quoteSell(world, command.at, command.good, amount);
+      const gains = quote.value;
       person.stock[command.good] = held - amount;
       person.wealth += gains;
+      // Selling restocks the town market; the price of the next sale falls.
+      const market = world.markets[command.at]?.[command.good];
+      if (market) market.stock += amount;
       recordOutcome(
         world,
         person.id,

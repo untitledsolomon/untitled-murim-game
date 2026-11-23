@@ -10,6 +10,7 @@ export type { World };
 export * from "./types";
 export * from "./constants";
 export * from "./paths";
+export * from "./pricing";
 export { commandSpec };
 
 /** A world plus the operations the rest of the program needs. */

@@ -19,6 +19,10 @@ export interface GoodDef {
   unit: string;
   /** Weight in carry units, for the carry-capacity limit on travel. */
   weight: number;
+  /** Units one person needs per year; drives town consumption. */
+  perCapitaNeed: number;
+  /** Essential goods always hold a baseline stock and shape unrest. */
+  essential: boolean;
 }
 
 /** One contributor to an explainable number. Factors always sum to the value. */
@@ -66,7 +70,10 @@ export interface RoadSnapshot {
 export interface GoodsSnapshot {
   basePrice: number;
   market: Price;
-  trend: number;
+  /** Units currently held in the town market. */
+  stock: number;
+  /** Target stock: days of consumption the market tries to hold. */
+  target: number;
 }
 
 export interface TownSnapshot {

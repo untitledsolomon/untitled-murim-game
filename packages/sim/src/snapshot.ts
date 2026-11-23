@@ -72,7 +72,8 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
       goods[good.id] = {
         basePrice: entry?.base ?? 0,
         market: marketPrice(world, town.id, good.id),
-        trend: entry?.trend ?? 0,
+        stock: entry?.stock ?? 0,
+        target: entry?.target ?? 0,
       };
     }
     return {
@@ -190,12 +191,14 @@ function buildOutliner(
     }
     for (const goodId of Object.keys(town.goods)) {
       const entry = town.goods[goodId]!;
-      if (Math.abs(entry.trend) > 0.15) {
+      // Market value over base gives the exact scarcity multiplier.
+      const scarcity = entry.basePrice > 0 ? entry.market.value / entry.basePrice : 1;
+      if (scarcity > 1.15 || scarcity < 0.85) {
         items.push({
           id: `todo-${town.id}-${goodId}`,
-          label: `${goodLabel(goodId)} ${entry.trend > 0 ? "scarce and dear" : "plentiful and cheap"} in ${town.name}`,
+          label: `${goodLabel(goodId)} ${scarcity > 1 ? "scarce and dear" : "plentiful and cheap"} in ${town.name}`,
           kind: "prices",
-          priority: Math.abs(entry.trend),
+          priority: Math.abs(scarcity - 1),
         });
         break;
       }

@@ -31,6 +31,54 @@ ask unless truly blocked. Entries are newest first.
 - **Pan cannot lose the map.** The camera center is clamped to just past the
   world edge; the map cannot be dragged off into empty space.
 
+## Phase 4a — stock economy and pricing
+
+- **Prices come from stock, not from a random walk.** The old `trend` field and
+  its drift/mean-reversion/noise are gone. Every day each town market does
+  `stock += production - dailyConsumption` (floored at 0), and the spot price is
+  `base × f(stock)`, `f(stock) = clamp(1 + STOCK_RESPONSE × (target − stock) /
+  max(target,1), 0.4, 3.0)` with `target = DAILY_TARGET_DAYS × dailyConsumption`.
+  `STOCK_RESPONSE = 2`, so a fully de-stocked market prices at 3× and a well-fed
+  surplus producer sinks to 0.4×.
+- **Base prices are effectively global.** Each town's base is the global
+  `BASE_PRICES` value times a seeded ±5% transport offset
+  (`BASE_TRANSPORT_OFFSET`). There are no permanent per-town base gaps to
+  arbitrage; every price difference the player acts on is a stock difference.
+- **Production is sized from populations, so stability is by construction.**
+  Widespread goods (grain, cloth) are grown by every town, with each county
+  producing 1.15× its own consumption (`COUNTY_SELF_SUFFICIENCY`), distributed
+  by seeded shares. Scarce goods (salt, tea, iron, medicine, timber) come from a
+  small curated set of specialist towns whose total output is 1.3× the whole
+  country's need (`SCARCE_SUPPLY_FACTOR`). Because rates derive from actual
+  populations, "total production ≥ 1.1× total consumption per good" holds for
+  every seed without tuning, and every town can reach a producer of every
+  essential good over the road graph.
+- **Markets open fully stocked, then diverge.** Every town starts at `stock =
+  target`; surpluses and deficits then emerge from production. A small import
+  floor (`IMPORT_FLOOR_DAYS = 3` of consumption, essentials only) is the
+  "market inertia" that keeps a cut-off town from starving to absolute zero —
+  blockaded towns settle near 2.8×, never at the hard 3× ceiling.
+- **A trade is the sum of per-unit prices, each unit moving the market.** `buy`
+  drains stock, `sell` restocks it. A quote factors exactly into `Base price`,
+  `Supply vs demand (spot)`, and `Size of your order`; the sell adds a `Market
+  spread` (5%) subtracted per unit. The factor-sum-to-value invariant is a
+  property test. A same-town buy-then-sell round trip loses exactly the spread.
+- **Buy caps at market stock, but still fails cleanly.** A buy takes only what
+  the market holds (a big request is partly filled), while carry capacity and
+  cash are still validated *first*, and no state changes on a failure. A cash
+  failure is testable because the home market is held above the player's reach.
+- **The heir's home town is a populous market town.** The first merchant house
+  anchors the player's home at population ≥ 900, so the home market is big
+  enough that buying its whole stock of an expensive good exceeds the player's
+  starting cash — which is what keeps "buying beyond your cash" a reachable,
+  testable failure.
+- **Society's first link: essential shortages raise unrest.** Unrest is bounded
+  and mean-reverting (moved toward `shortages × UNREST_PER_SHORTAGE`, capped at
+  0.6) instead of a random walk; crime keeps its old random walk until the full
+  chain lands in Phase 4b.
+- **`FORMAT_VERSION` 4 → 5.** Market entries, town population, and the pricing
+  model all changed shape; old saves are rejected.
+
 ## Phase 3 — world shape, roads, travel time
 
 - **Travel is a journey, not an instant jump.** A `travel` command plans a
@@ -117,10 +165,9 @@ ask unless truly blocked. Entries are newest first.
 
 - Phase 3: no random road robbery in v0.1 (road travel is costly only in
   days and tolls).
-- Phase 4a: resource placement schemes per good; effective global base prices
-  with at most a ±5% transport offset; the pricing function shape and its
-  honest per-unit factor decomposition.
 - Phase 4b: NPC knowledge stand-in (they trade on true spot prices until fog
-  exists); tuned economic constants and why.
+  exists); tuned economic constants and why (the Phase 4a economy and its
+  resource placement, global ±5% base prices, and factor decomposition are
+  decided above).
 - Phase 5: `shortestPath` plans over true open roads — a small, known
   omniscience the player does not have.

@@ -1,17 +1,25 @@
 import {
   BASE_PRICES,
+  BASE_TRANSPORT_OFFSET,
   COUNTY_COUNT,
   COUNTY_GRID,
+  COUNTY_SELF_SUFFICIENCY,
+  DAILY_TARGET_DAYS,
   DAYS_PER_YEAR,
   GOODS,
+  GOOD_SCHEMES,
+  POPULATION_MAX,
+  POPULATION_MIN,
   ROAD_SPEED,
+  SCARCE_SUPPLY_FACTOR,
   STARTING_CASH,
   TOLL_PER_UNIT,
   TOWNS_PER_COUNTY,
   WORLD_SIZE,
 } from "./constants";
+import { round } from "./explain";
 import { makeNameGen } from "./names";
-import { createRng, rngInt, rngPick, rngRange } from "./rng";
+import { createRng, rngInt, rngPick, rngRange, rngShuffle } from "./rng";
 import type { County, Organization, Person, Road, Town, World } from "./state";
 import type { GoodId, TownId } from "./types";
 
@@ -78,30 +86,82 @@ export function generateWorld(seed: number): World {
           name: names.town(),
           position: [Math.round(x * 10) / 10, Math.round(y * 10) / 10],
           magistrateId,
+          population: rngInt(rng, POPULATION_MIN, POPULATION_MAX + 1),
           crime: rng.next() * 0.3,
           unrest: rng.next() * 0.25,
         };
         world.towns.push(town);
         world.markets[town.id] = {};
-
-        for (const good of GOODS) {
-          // Specialty towns have a deep surplus of one good, which keeps prices low.
-          const isSpecialty = rng.next() < 0.3;
-          const multiplier = isSpecialty ? rngRange(rng, 0.4, 0.62) : rngRange(rng, 0.68, 1.35);
-          world.markets[town.id]![good.id] = {
-            base: Math.round(BASE_PRICES[good.id]! * multiplier * 100) / 100,
-            trend: Math.round(rngRange(rng, -0.06, 0.06) * 1000) / 1000,
-          };
-        }
       }
     }
   }
 
   generateRoads(world, rng);
   generateOrganizations(world, counters, names, rng);
+  // The merchant house town's population is boosted inside generateOrganizations,
+  // so the economy is sized against the final populations.
+  initializeEconomy(world, rng);
   generatePlayer(world, counters, names, rng);
 
   return world;
+}
+
+/**
+ * Set the production numbers that drive the stock economy. Widespread goods
+ * are grown by every town, scaled so each county produces `COUNTY_SELF_SUFFICIENCY`
+ * times what its own people eat; scarce goods come from a small fixed number of
+ * specialist towns, scaled so the country produces `SCARCE_SUPPLY_FACTOR` times
+ * what everyone needs. Sizing production against actual populations is what
+ * guarantees the "total production >= 1.1x total consumption" contract of the
+ * economy, for every seed.
+ */
+function initializeEconomy(world: World, rng: ReturnType<typeof createRng>): void {
+  for (const good of GOODS) {
+    const scheme = GOOD_SCHEMES[good.id]!;
+    if (scheme.kind === "widespread") {
+      for (const county of world.counties) {
+        const towns = world.towns.filter((t) => t.countyId === county.id);
+        const rels = towns.map(() => rngRange(rng, 0.4, 1.6));
+        const relSum = rels.reduce((sum, rel) => sum + rel, 0);
+        const consumption = towns.reduce((sum, t) => sum + (t.population * good.perCapitaNeed) / DAYS_PER_YEAR, 0);
+        const productionTotal = COUNTY_SELF_SUFFICIENCY * consumption;
+        towns.forEach((town, index) => {
+          initMarket(world, town.id, good.id, town.population, (productionTotal * rels[index]!) / relSum, good.perCapitaNeed, rng);
+        });
+      }
+    } else {
+      const producers = new Set(rngShuffle(rng, world.towns).slice(0, scheme.producers ?? 0).map((t) => t.id));
+      const consumption = world.towns.reduce((sum, t) => sum + (t.population * good.perCapitaNeed) / DAYS_PER_YEAR, 0);
+      const perProducer = (SCARCE_SUPPLY_FACTOR * consumption) / (scheme.producers ?? 1);
+      for (const town of world.towns) {
+        initMarket(world, town.id, good.id, town.population, producers.has(town.id) ? perProducer : 0, good.perCapitaNeed, rng);
+      }
+    }
+  }
+}
+
+/** Build one market entry: base price, stock, production, consumption, target. */
+function initMarket(
+  world: World,
+  townId: TownId,
+  goodId: GoodId,
+  population: number,
+  production: number,
+  perCapitaNeed: number,
+  rng: ReturnType<typeof createRng>,
+): void {
+  const dailyConsumption = (population * perCapitaNeed) / DAYS_PER_YEAR;
+  const target = round(dailyConsumption * DAILY_TARGET_DAYS, 3);
+  // Base prices are effectively global: at most a ±5% transport offset. Price
+  // differences come from stock, never from permanent per-town base gaps.
+  const transport = 1 + rngRange(rng, -BASE_TRANSPORT_OFFSET, BASE_TRANSPORT_OFFSET);
+  world.markets[townId]![goodId] = {
+    base: round(BASE_PRICES[goodId]! * transport, 2),
+    stock: target, // markets open fully stocked; surpluses and deficits emerge
+    production: round(production, 3),
+    dailyConsumption: round(dailyConsumption, 3),
+    target,
+  };
 }
 
 function distance(a: Town, b: Town): number {
@@ -242,8 +302,18 @@ function generateOrganizations(
     "bank",
     "escort",
   ];
+  let homeBoosted = false;
   for (const kind of kinds) {
     const town = rngPick(rng, world.towns);
+    // The first merchant house anchors the player's home town, so that town is
+    // a populous market town. A large home market also keeps cash failures
+    // reachable: buying its whole stock of an expensive good costs more than
+    // the player's starting wealth.
+    if (kind === "merchant_house" && !homeBoosted) {
+      const home = world.towns.find((t) => t.countyId === town.countyId);
+      if (home) home.population = rngInt(rng, 900, POPULATION_MAX + 1);
+      homeBoosted = true;
+    }
     const memberCount = rngInt(rng, 4, 8);
     const memberIds: string[] = [];
     for (let i = 0; i < memberCount; i++) {
