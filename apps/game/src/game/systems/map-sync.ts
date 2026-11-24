@@ -32,14 +32,12 @@ export function createTownMarker(
     return e;
 }
 
-function colorForTown(town: TownSnapshot, mode: MapMode): Rgba {
+function colorForTown(town: TownSnapshot, mode: MapMode, selectedGoodId: string): Rgba {
     switch (mode) {
         case "prices": {
-            const goods = Object.values(town.goods);
-            if (goods.length === 0) return divergingColor(0.5);
-            let ratio = 0;
-            for (const good of goods) ratio += good.market.value / Math.max(good.basePrice, 0.001);
-            ratio /= goods.length;
+            const entry = town.goods[selectedGoodId];
+            if (!entry) return divergingColor(0.5);
+            const ratio = entry.market.value / Math.max(entry.basePrice, 0.001);
             return divergingColor((clamp(ratio, 0.7, 1.6) - 0.7) / 0.9);
         }
         case "crime":
@@ -88,14 +86,15 @@ export const MapSyncSystem = {
             }
         }
 
-        // Recolor markers when the mode or the published day changes.
-        if (ui.lastMode !== ui.mode || ui.lastDay !== snap.day) {
+        // Recolor markers when the mode, selected good, or published day changes.
+        if (ui.lastMode !== ui.mode || ui.lastGood !== ui.selectedGoodId || ui.lastDay !== snap.day) {
             ui.lastMode = ui.mode;
+            ui.lastGood = ui.selectedGoodId;
             ui.lastDay = snap.day;
             for (const town of snap.towns) {
                 const eid = ui.townMeshes.get(town.id);
                 if (eid === undefined) continue;
-                const c = colorForTown(town, ui.mode);
+                const c = colorForTown(town, ui.mode, ui.selectedGoodId);
                 colors.set(eid, c[0], c[1], c[2], c[3]);
             }
         }

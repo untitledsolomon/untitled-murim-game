@@ -10,13 +10,14 @@
 
 {#if game.snapshot}
     {@const banks = game.snapshot.organizations.filter((o) => o.kind === "bank")}
-    {@const cash = game.snapshot.player.cash + Object.entries(game.snapshot.player.stock).reduce(
-        (s, [, q]) => s + q * 40,
-        0,
-    )}
+    {@const cash = game.snapshot.player.cash}
+    {@const wealth = game.snapshot.measures?.wealth.value ?? cash}
     <PanelFrame
         title="Banking"
-        numbers={[{ label: "Cash", value: formatMoney(cash), tone: "gold" }]}
+        numbers={[
+            { label: "Cash", value: formatMoney(cash), tone: "gold" },
+            { label: "Wealth", value: formatMoney(wealth) },
+        ]}
         tabs={[{ id: "banks", label: "Banking houses" }]}
     >
         {#snippet content()}

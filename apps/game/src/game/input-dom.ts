@@ -1,6 +1,6 @@
 import type { World } from "@dylanebert/shallot";
 import { viewportToWorld } from "@dylanebert/shallot/rendering";
-import { clampZoom } from "./camera-math";
+import { clampPan, clampZoom } from "./camera-math";
 import { MapUi } from "./components";
 import { SPEEDS } from "./speeds";
 
@@ -58,10 +58,10 @@ export function setupMapInput(world: World): () => void {
         const [x, y] = point(e);
         const at = ground(x, y);
         if (!at) return;
-        ui.center = [
+        ui.center = clampPan([
             drag.centerX + (drag.worldX - at[0]),
             drag.centerZ + (drag.worldZ - at[1]),
-        ];
+        ]);
     };
     const onPointerUp = (e: PointerEvent): void => {
         if (drag && e.pointerId === drag.pointerId) drag = null;
@@ -73,10 +73,10 @@ export function setupMapInput(world: World): () => void {
         const anchor = ground(x, y) ?? [ui.center[0], ui.center[1]];
         const next = clampZoom(ui.zoom * Math.exp(-e.deltaY * 0.002));
         const k = next / ui.zoom;
-        ui.center = [
+        ui.center = clampPan([
             anchor[0] - (anchor[0] - ui.center[0]) * k,
             anchor[1] - (anchor[1] - ui.center[1]) * k,
-        ];
+        ]);
         ui.zoom = next;
     };
     const onKeyDown = (e: KeyboardEvent): void => {

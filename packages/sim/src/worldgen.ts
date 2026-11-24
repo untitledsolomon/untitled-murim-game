@@ -1,15 +1,28 @@
 import {
   BASE_PRICES,
+  BASE_TRANSPORT_OFFSET,
   COUNTY_COUNT,
   COUNTY_GRID,
+  COUNTY_SELF_SUFFICIENCY,
+  DAILY_TARGET_DAYS,
+  DAYS_PER_YEAR,
   GOODS,
+  GOOD_SCHEMES,
+  POPULATION_MAX,
+  POPULATION_MIN,
+  ROAD_SPEED,
+  SCARCE_SUPPLY_FACTOR,
   STARTING_CASH,
+  TOLL_PER_UNIT,
   TOWNS_PER_COUNTY,
+  TRADERS_PER_COUNTY,
+  TRADERS_PER_HOUSE,
   WORLD_SIZE,
 } from "./constants";
+import { round } from "./explain";
 import { makeNameGen } from "./names";
-import { createRng, rngInt, rngPick, rngRange } from "./rng";
-import type { County, Organization, Person, Town, World } from "./state";
+import { createRng, rngInt, rngPick, rngRange, rngShuffle } from "./rng";
+import type { County, Organization, Person, Road, Town, World } from "./state";
 import type { GoodId, TownId } from "./types";
 
 interface GenCounters {
@@ -35,15 +48,18 @@ export function generateWorld(seed: number): World {
     day: 0,
     counties: [],
     towns: [],
+    roads: [],
     organizations: [],
     people: {},
     markets: {},
     player: { personId: "person-0", background: "Merchant's heir", familyIds: [] },
     queue: [],
+    commandLog: [],
     history: [],
     alerts: [],
+    shocks: [],
     rng,
-    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0 },
+    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0, road: 0, shock: 0 },
   };
 
   // Counties laid out on a square grid.
@@ -55,6 +71,7 @@ export function generateWorld(seed: number): World {
         id,
         name: names.county(),
         isCapital: world.counties.length === 0,
+        bounds: { minX: gx * cellSize, minY: gy * cellSize, maxX: (gx + 1) * cellSize, maxY: (gy + 1) * cellSize },
       };
       world.counties.push(county);
 
@@ -72,29 +89,225 @@ export function generateWorld(seed: number): World {
           name: names.town(),
           position: [Math.round(x * 10) / 10, Math.round(y * 10) / 10],
           magistrateId,
+          population: rngInt(rng, POPULATION_MIN, POPULATION_MAX + 1),
           crime: rng.next() * 0.3,
           unrest: rng.next() * 0.25,
         };
         world.towns.push(town);
         world.markets[town.id] = {};
-
-        for (const good of GOODS) {
-          // Specialty towns have a deep surplus of one good, which keeps prices low.
-          const isSpecialty = rng.next() < 0.3;
-          const multiplier = isSpecialty ? rngRange(rng, 0.4, 0.62) : rngRange(rng, 0.68, 1.35);
-          world.markets[town.id]![good.id] = {
-            base: Math.round(BASE_PRICES[good.id]! * multiplier * 100) / 100,
-            trend: Math.round(rngRange(rng, -0.06, 0.06) * 1000) / 1000,
-          };
-        }
       }
     }
   }
 
+  generateRoads(world, rng);
   generateOrganizations(world, counters, names, rng);
+  // The merchant house town's population is boosted inside generateOrganizations,
+  // so the economy is sized against the final populations.
+  initializeEconomy(world, rng);
+  generateTraders(world, counters, names, rng);
   generatePlayer(world, counters, names, rng);
 
   return world;
+}
+
+/**
+ * The NPC merchants who keep the world trading without the player: a couple in
+ * every county plus a couple tied to each merchant house. They are ordinary
+ * people with the `isTrader` flag and a merchant's starting purse; the trader
+ * system in npc.ts decides their actions each day from that point on.
+ */
+function generateTraders(
+  world: World,
+  counters: GenCounters,
+  names: ReturnType<typeof makeNameGen>,
+  rng: ReturnType<typeof createRng>,
+): void {
+  for (const county of world.counties) {
+    const towns = world.towns.filter((t) => t.countyId === county.id);
+    for (let i = 0; i < TRADERS_PER_COUNTY; i++) {
+      createTrader(world, counters, names, rngPick(rng, towns).id, rng);
+    }
+  }
+  const houses = world.organizations.filter((o) => o.kind === "merchant_house");
+  for (const house of houses) {
+    const homeTown = world.towns.find((t) => t.countyId === house.countyId) ?? rngPick(rng, world.towns);
+    for (let i = 0; i < TRADERS_PER_HOUSE; i++) {
+      createTrader(world, counters, names, homeTown.id, rng);
+    }
+  }
+}
+
+function createTrader(
+  world: World,
+  counters: GenCounters,
+  names: ReturnType<typeof makeNameGen>,
+  homeTownId: TownId,
+  rng: ReturnType<typeof createRng>,
+): void {
+  const id = makePerson(world, counters, names, homeTownId, rngInt(rng, 18, 55));
+  const person = world.people[id]!;
+  person.isTrader = true;
+  person.wealth = Math.round(rngRange(rng, 150, 400));
+}
+
+/**
+ * Set the production numbers that drive the stock economy. Widespread goods
+ * are grown by every town, scaled so each county produces `COUNTY_SELF_SUFFICIENCY`
+ * times what its own people eat; scarce goods come from a small fixed number of
+ * specialist towns, scaled so the country produces `SCARCE_SUPPLY_FACTOR` times
+ * what everyone needs. Sizing production against actual populations is what
+ * guarantees the "total production >= 1.1x total consumption" contract of the
+ * economy, for every seed.
+ */
+function initializeEconomy(world: World, rng: ReturnType<typeof createRng>): void {
+  for (const good of GOODS) {
+    const scheme = GOOD_SCHEMES[good.id]!;
+    if (scheme.kind === "widespread") {
+      for (const county of world.counties) {
+        const towns = world.towns.filter((t) => t.countyId === county.id);
+        const rels = towns.map(() => rngRange(rng, 0.4, 1.6));
+        const relSum = rels.reduce((sum, rel) => sum + rel, 0);
+        const consumption = towns.reduce((sum, t) => sum + (t.population * good.perCapitaNeed) / DAYS_PER_YEAR, 0);
+        const productionTotal = COUNTY_SELF_SUFFICIENCY * consumption;
+        towns.forEach((town, index) => {
+          initMarket(world, town.id, good.id, town.population, (productionTotal * rels[index]!) / relSum, good.perCapitaNeed, rng);
+        });
+      }
+    } else {
+      const producers = new Set(rngShuffle(rng, world.towns).slice(0, scheme.producers ?? 0).map((t) => t.id));
+      const consumption = world.towns.reduce((sum, t) => sum + (t.population * good.perCapitaNeed) / DAYS_PER_YEAR, 0);
+      const perProducer = (SCARCE_SUPPLY_FACTOR * consumption) / (scheme.producers ?? 1);
+      for (const town of world.towns) {
+        initMarket(world, town.id, good.id, town.population, producers.has(town.id) ? perProducer : 0, good.perCapitaNeed, rng);
+      }
+    }
+  }
+}
+
+/** Build one market entry: base price, stock, production, consumption, target. */
+function initMarket(
+  world: World,
+  townId: TownId,
+  goodId: GoodId,
+  population: number,
+  production: number,
+  perCapitaNeed: number,
+  rng: ReturnType<typeof createRng>,
+): void {
+  const dailyConsumption = (population * perCapitaNeed) / DAYS_PER_YEAR;
+  const target = round(dailyConsumption * DAILY_TARGET_DAYS, 3);
+  // Base prices are effectively global: at most a ±5% transport offset. Price
+  // differences come from stock, never from permanent per-town base gaps.
+  const transport = 1 + rngRange(rng, -BASE_TRANSPORT_OFFSET, BASE_TRANSPORT_OFFSET);
+  world.markets[townId]![goodId] = {
+    base: round(BASE_PRICES[goodId]! * transport, 2),
+    stock: target, // markets open fully stocked; surpluses and deficits emerge
+    production: round(production, 3),
+    dailyConsumption: round(dailyConsumption, 3),
+    target,
+  };
+}
+
+function distance(a: Town, b: Town): number {
+  const dx = a.position[0] - b.position[0];
+  const dy = a.position[1] - b.position[1];
+  return Math.hypot(dx, dy);
+}
+
+function roadBetween(world: World, a: TownId, b: TownId): Road | undefined {
+  return world.roads.find((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+}
+
+function addRoad(world: World, a: TownId, b: TownId): void {
+  if (a === b || roadBetween(world, a, b)) return;
+  const at = world.towns.find((t) => t.id === a);
+  const bt = world.towns.find((t) => t.id === b);
+  if (!at || !bt) return;
+  const length = distance(at, bt);
+  world.roads.push({
+    id: `road-${world.counters.road++}`,
+    a,
+    b,
+    length: Math.round(length * 100) / 100,
+    travelDays: Math.max(1, Math.ceil(length / ROAD_SPEED)),
+    toll: Math.round(length * TOLL_PER_UNIT * 100) / 100,
+    status: "open",
+  });
+}
+
+/** A spanning tree over the towns, built with Prim's algorithm. */
+function minimumSpanningTree(world: World, towns: Town[]): Array<[TownId, TownId]> {
+  const edges: Array<[TownId, TownId]> = [];
+  if (towns.length < 2) return edges;
+  const inTree = new Set<TownId>([towns[0]!.id]);
+  while (inTree.size < towns.length) {
+    let best: { a: TownId; b: TownId; d: number } | null = null;
+    for (const t of towns) {
+      if (!inTree.has(t.id)) continue;
+      for (const u of towns) {
+        if (inTree.has(u.id)) continue;
+        const d = distance(t, u);
+        if (best === null || d < best.d) best = { a: t.id, b: u.id, d };
+      }
+    }
+    if (best === null) break;
+    edges.push([best.a, best.b]);
+    inTree.add(best.b);
+  }
+  return edges;
+}
+
+/** Two towns are in the same component when a chain of roads links them. */
+function components(world: World): Map<TownId, number> {
+  const comp = new Map<TownId, number>();
+  let index = 0;
+  for (const town of world.towns) {
+    if (comp.has(town.id)) continue;
+    const stack = [town.id];
+    comp.set(town.id, index);
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      for (const road of world.roads) {
+        const next = road.a === current ? road.b : road.b === current ? road.a : null;
+        if (next !== null && !comp.has(next)) {
+          comp.set(next, index);
+          stack.push(next);
+        }
+      }
+    }
+    index++;
+  }
+  return comp;
+}
+
+/**
+ * Build the road network. Roads are seeded but the network is structural: a
+ * spanning tree per county plus a couple of extra loops (seeded), then the
+ * closest towns' pair across components until the whole country is one
+ * network. Closeness needs no rng, so the country is always connected.
+ */
+function generateRoads(world: World, rng: ReturnType<typeof createRng>): void {
+  for (const county of world.counties) {
+    const towns = world.towns.filter((t) => t.countyId === county.id);
+    for (const [a, b] of minimumSpanningTree(world, towns)) addRoad(world, a, b);
+    const extras = rngInt(rng, 1, 3); // one or two extra loops per county
+    for (let i = 0; i < extras; i++) addRoad(world, rngPick(rng, towns).id, rngPick(rng, towns).id);
+  }
+
+  while (new Set(components(world).values()).size > 1) {
+    let best: { a: TownId; b: TownId; d: number } | null = null;
+    const comp = components(world);
+    for (const a of world.towns) {
+      const ca = comp.get(a.id)!;
+      for (const b of world.towns) {
+        if (a.id === b.id || comp.get(b.id) === ca) continue;
+        const d = distance(a, b);
+        if (best === null || d < best.d) best = { a: a.id, b: b.id, d };
+      }
+    }
+    if (best === null) break;
+    addRoad(world, best.a, best.b);
+  }
 }
 
 function makePerson(
@@ -108,8 +321,10 @@ function makePerson(
   const person: Person = {
     id,
     name: names.person(),
-    age,
+    // Born `age` years before day 0, so a 23-year-old starts at day 0 aged 23.
+    birthDay: -age * DAYS_PER_YEAR,
     location: atTown,
+    journey: null,
     wealth: rngRange(world.rng, 20, 90),
     stock: {},
   };
@@ -131,8 +346,18 @@ function generateOrganizations(
     "bank",
     "escort",
   ];
+  let homeBoosted = false;
   for (const kind of kinds) {
     const town = rngPick(rng, world.towns);
+    // The first merchant house anchors the player's home town, so that town is
+    // a populous market town. A large home market also keeps cash failures
+    // reachable: buying its whole stock of an expensive good costs more than
+    // the player's starting wealth.
+    if (kind === "merchant_house" && !homeBoosted) {
+      const home = world.towns.find((t) => t.countyId === town.countyId);
+      if (home) home.population = rngInt(rng, 900, POPULATION_MAX + 1);
+      homeBoosted = true;
+    }
     const memberCount = rngInt(rng, 4, 8);
     const memberIds: string[] = [];
     for (let i = 0; i < memberCount; i++) {

@@ -1,13 +1,19 @@
+import { commandSpec } from "./actions";
+import { submitCommand } from "./commands";
 import { buildSnapshot } from "./snapshot";
 import { deserializeState, serializeState } from "./serialization";
 import { stepDay } from "./tick";
 import type { World } from "./state";
-import type { Command, Snapshot } from "./types";
+import type { ActorRef, Command, CommandSpec, Snapshot, SnapshotOptions } from "./types";
 import { generateWorld } from "./worldgen";
 
 export type { World };
 export * from "./types";
 export * from "./constants";
+export * from "./paths";
+export * from "./pricing";
+export * from "./npc";
+export { commandSpec };
 
 /** A world plus the operations the rest of the program needs. */
 export interface Game {
@@ -16,9 +22,17 @@ export interface Game {
   /** Advance the simulation by one day. Safe to call many times. */
   step(): void;
   /** The UI-facing read of the current state. Pure and cheap. */
-  snapshot(): Snapshot;
-  /** Queue a command, for the player or for AI. */
-  enqueue(command: Command): void;
+  snapshot(options?: SnapshotOptions): Snapshot;
+  /**
+   * The single entry point for commands from the app, player or AI. Assigns
+   * the command id, defaults the execution day to today, and records the
+   * submission in `world.commandLog` for replay, so a recorded log replays
+   * byte-identically. A command already due (`command.day <= world.day`)
+   * applies immediately, in submission order; a future-dated command is queued
+   * for its day. NPC traders act through the same path inside the daily tick
+   * (see `submitCommand` in commands.ts).
+   */
+  send(actor: ActorRef, spec: CommandSpec): Command;
   serialize(): string;
   load(text: string): void;
 }
@@ -32,18 +46,20 @@ export function createWorld(seed: number): World {
 export function createGame(seed: number): Game {
   const world = generateWorld(seed);
   return {
-    seed,
+    get seed() {
+      return world.seed;
+    },
     get world() {
       return world;
     },
     step() {
       stepDay(world);
     },
-    snapshot() {
-      return buildSnapshot(world);
+    snapshot(options?: SnapshotOptions) {
+      return buildSnapshot(world, options);
     },
-    enqueue(command: Command) {
-      world.queue.push(command);
+    send(actor: ActorRef, spec: CommandSpec) {
+      return submitCommand(world, actor, spec);
     },
     serialize() {
       return serializeState(world);
@@ -56,17 +72,5 @@ export function createGame(seed: number): Game {
 }
 
 function copyWorld(target: World, source: World): void {
-  target.seed = source.seed;
-  target.day = source.day;
-  target.counties = source.counties;
-  target.towns = source.towns;
-  target.organizations = source.organizations;
-  target.people = source.people;
-  target.markets = source.markets;
-  target.player = source.player;
-  target.queue = source.queue;
-  target.history = source.history;
-  target.alerts = source.alerts;
-  target.rng = source.rng;
-  target.counters = source.counters;
+  Object.assign(target, source);
 }

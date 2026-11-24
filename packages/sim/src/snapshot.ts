@@ -1,36 +1,70 @@
-import { GOODS } from "./constants";
+import { GOODS, goodLabel, WORLD_SIZE } from "./constants";
 import { factor, round, scalePrice, sumFactors, sumPrices } from "./explain";
 import { marketPrice } from "./pricing";
 import { hashStr } from "./rng";
-import type { World } from "./state";
+import { ageOf, type Person, type World } from "./state";
 import {
   type CountySnapshot,
   type OrganizationSnapshot,
   type OutlinerItem,
   type PersonSnapshot,
+  type PlayerJourney,
   type Price,
+  type RoadSnapshot,
+  type ShockSnapshot,
   type Snapshot,
+  type SnapshotOptions,
   type TownSnapshot,
+  type TownId,
+  type Vector2,
 } from "./types";
 
 /**
  * A pure read of the world into the shapes the UI binds to.
  * Called when a day rolls over, never mid-frame.
  */
-export function buildSnapshot(world: World): Snapshot {
+export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snapshot {
   const people: Record<string, PersonSnapshot> = {};
   for (const personId of Object.keys(world.people)) {
     const person = world.people[personId]!;
-    people[personId] = { id: person.id, name: person.name, age: person.age, location: person.location };
+    const snapshot: PersonSnapshot = {
+      id: person.id,
+      name: person.name,
+      age: ageOf(world, person),
+      location: person.location,
+    };
+    if (person.familyRole !== undefined) snapshot.familyRole = person.familyRole;
+    people[personId] = snapshot;
   }
 
   const player = world.people[world.player.personId]!;
+  const ledger: Snapshot["player"]["ledger"] = world.history
+    .filter((outcome) => outcome.actorId === player.id)
+    .slice(-30)
+    .reverse()
+    .map((outcome) => ({ day: outcome.day, text: outcome.text, kind: outcome.kind }));
 
   const counties: CountySnapshot[] = world.counties.map((county) => ({
     id: county.id,
     name: county.name,
     isCapital: county.isCapital,
+    bounds: { ...county.bounds },
   }));
+
+  const roads: RoadSnapshot[] = world.roads.map((road) => {
+    const crimeA = townById(world, road.a)?.crime ?? 0;
+    const crimeB = townById(world, road.b)?.crime ?? 0;
+    return {
+      id: road.id,
+      a: road.a,
+      b: road.b,
+      length: road.length,
+      travelDays: road.travelDays,
+      toll: road.toll,
+      status: road.status,
+      danger: Math.round(((crimeA + crimeB) / 2) * 100) / 100,
+    };
+  });
 
   const towns: TownSnapshot[] = world.towns.map((town) => {
     const goods: TownSnapshot["goods"] = {};
@@ -39,7 +73,8 @@ export function buildSnapshot(world: World): Snapshot {
       goods[good.id] = {
         basePrice: entry?.base ?? 0,
         market: marketPrice(world, town.id, good.id),
-        trend: entry?.trend ?? 0,
+        stock: entry?.stock ?? 0,
+        target: entry?.target ?? 0,
       };
     }
     return {
@@ -90,23 +125,47 @@ export function buildSnapshot(world: World): Snapshot {
 
   const outliner = buildOutliner(towns, organizations);
 
+  const shocks: ShockSnapshot[] = world.shocks.map((shock) => {
+    let targetLabel = shock.targetId;
+    if (shock.kind === "flood") {
+      const road = world.roads.find((r) => r.id === shock.targetId);
+      if (road) targetLabel = `${townById(world, road.a)?.name ?? road.a}–${townById(world, road.b)?.name ?? road.b}`;
+    } else {
+      const county = world.counties.find((c) => c.id === shock.targetId);
+      if (county) targetLabel = county.name;
+    }
+    return {
+      id: shock.id,
+      kind: shock.kind,
+      targetLabel,
+      startDay: shock.startDay,
+      endDay: shock.endDay,
+      daysLeft: Math.max(0, shock.endDay - world.day),
+    };
+  });
+
   return {
     seed: world.seed,
     day: world.day,
     player: {
       personId: player.id,
       name: player.name,
-      age: player.age,
+      age: ageOf(world, player),
       background: world.player.background,
       location: player.location,
+      position: playerPosition(world, player),
+      journey: playerJourneySnapshot(world, player),
       cash: round(player.wealth),
       stock: { ...player.stock },
       family,
+      ledger,
     },
     counties,
     towns,
+    roads,
     organizations,
     goods: GOODS,
+    shocks,
     measures,
     alerts,
     outliner,
@@ -149,16 +208,18 @@ function buildOutliner(
   const items: OutlinerItem[] = [];
   for (const town of towns) {
     if (town.unrest > 0.4) {
-      items.push({ id: `todo-${town.id}`, label: `Unrest rising in ${town.name}`, kind: "unrest", priority: town.unrest });
+      items.push({ id: `todo-${town.id}`, label: `Unrest high in ${town.name}`, kind: "unrest", priority: town.unrest });
     }
     for (const goodId of Object.keys(town.goods)) {
       const entry = town.goods[goodId]!;
-      if (Math.abs(entry.trend) > 0.15) {
+      // Market value over base gives the exact scarcity multiplier.
+      const scarcity = entry.basePrice > 0 ? entry.market.value / entry.basePrice : 1;
+      if (scarcity > 1.15 || scarcity < 0.85) {
         items.push({
           id: `todo-${town.id}-${goodId}`,
-          label: `${goodLabel(goodId)} ${entry.trend > 0 ? "surplus of value" : "bargain"} in ${town.name}`,
+          label: `${goodLabel(goodId)} ${scarcity > 1 ? "scarce and dear" : "plentiful and cheap"} in ${town.name}`,
           kind: "prices",
-          priority: Math.abs(entry.trend),
+          priority: Math.abs(scarcity - 1),
         });
         break;
       }
@@ -187,6 +248,49 @@ function orgCountyTown(world: World, org: World["organizations"][number]): strin
   return world.towns.find((t) => t.countyId === org.countyId)?.id ?? world.towns[0]!.id;
 }
 
-function goodLabel(goodId: string): string {
-  return GOODS.find((good) => good.id === goodId)?.name ?? goodId;
+function townById(world: World, townId: TownId): World["towns"][number] | undefined {
+  return world.towns.find((t) => t.id === townId);
+}
+
+function townPosition(world: World, townId: TownId): Vector2 {
+  return townById(world, townId)?.position ?? [WORLD_SIZE / 2, WORLD_SIZE / 2];
+}
+
+function lerp(a: Vector2, b: Vector2, t: number): Vector2 {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/**
+ * Where the player is on the world: a town's position, or a point on the road
+ * when travelling, interpolated within the current leg so the marker follows
+ * the road rather than jumping across the map.
+ */
+function playerPosition(world: World, player: Person): Vector2 {
+  const journey = player.journey;
+  if (journey === null) return townPosition(world, player.location ?? "");
+  const total = journey.arriveDay - journey.departDay;
+  const elapsed = Math.max(0, Math.min(world.day - journey.departDay, total - 1));
+  let acc = 0;
+  for (let i = 0; i < journey.path.length - 1; i++) {
+    const leg = journey.legs[i] ?? 1;
+    if (elapsed < acc + leg) {
+      const fraction = Math.max(0, Math.min(1, (elapsed - acc) / leg));
+      return lerp(townPosition(world, journey.path[i]!), townPosition(world, journey.path[i + 1]!), fraction);
+    }
+    acc += leg;
+  }
+  return townPosition(world, journey.path[journey.path.length - 1]!);
+}
+
+/** The journey as the HUD reads it: destination, schedule, and time to go. */
+function playerJourneySnapshot(world: World, player: Person): PlayerJourney | null {
+  const journey = player.journey;
+  if (journey === null) return null;
+  return {
+    to: journey.path[journey.path.length - 1]!,
+    departDay: journey.departDay,
+    arriveDay: journey.arriveDay,
+    days: journey.arriveDay - journey.departDay,
+    eta: Math.max(0, journey.arriveDay - world.day),
+  };
 }

@@ -20,12 +20,10 @@
         content?: Snippet<[selected: string]>;
     } = $props();
 
-    let selected = $state<string>("");
-
-    // Pick the first tab when the frame first mounts; tabs are static per panel.
-    $effect(() => {
-        if (selected === "" && tabs.length > 0) selected = tabs[0].id;
-    });
+    // Open the first tab immediately. Tabs are static per panel, so there is no
+    // need to re-read the prop after mount.
+    // svelte-ignore state_referenced_locally
+    let selected = $state<string>(tabs[0]?.id ?? "");
 </script>
 
 <div class="frame">

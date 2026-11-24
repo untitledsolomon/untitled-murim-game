@@ -1,3 +1,4 @@
+import type { Component } from "svelte";
 import Family from "./Family.svelte";
 import Organization from "./Organization.svelte";
 import Town from "./Town.svelte";
@@ -11,20 +12,24 @@ import Succession from "./Succession.svelte";
 export interface PanelDef {
     id: string;
     title: string;
-    component: unknown;
+    component: Component;
+    /** False for panels whose sim content does not exist yet: they open a stub. */
+    enabled: boolean;
 }
 
-/** All panels reachable from the top bar, opened as movable windows. */
+/** All panels reachable from the bottom nav. Enabled panels open their real
+ * content in the dock; disabled panels (content arrives in later phases) open
+ * the "Not yet available" stub. */
 export const PANELS: PanelDef[] = [
-    { id: "family", title: "You & family", component: Family },
-    { id: "organization", title: "Organization", component: Organization },
-    { id: "town", title: "Town / district", component: Town },
-    { id: "trade", title: "Trade", component: Trade },
-    { id: "information", title: "Information", component: Information },
-    { id: "politics", title: "Politics", component: Politics },
-    { id: "banking", title: "Banking", component: Banking },
-    { id: "martial", title: "Martial", component: Martial },
-    { id: "succession", title: "Succession", component: Succession },
+    { id: "trade", title: "Trade", component: Trade, enabled: true },
+    { id: "town", title: "Town", component: Town, enabled: true },
+    { id: "family", title: "You & family", component: Family, enabled: true },
+    { id: "organization", title: "Organization", component: Organization, enabled: true },
+    { id: "information", title: "Information", component: Information, enabled: true },
+    { id: "politics", title: "Politics", component: Politics, enabled: false },
+    { id: "banking", title: "Banking", component: Banking, enabled: false },
+    { id: "martial", title: "Martial", component: Martial, enabled: false },
+    { id: "succession", title: "Succession", component: Succession, enabled: false },
 ];
 
 export function panelTitle(id: string): string {

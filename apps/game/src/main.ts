@@ -19,18 +19,26 @@ function resolveSeed(): number {
     return DEFAULT_SEED;
 }
 
-/** The headless game, shared by the engine systems and the HUD bridge. */
-export const game: Game = createGame(resolveSeed());
+// The headless HUD route mounts Svelte only, over a plain projection of the
+// world. It is what the UI tests drive, so it must not need WebGPU.
+const params = new URLSearchParams(window.location.search);
+if (params.get("hud") === "standalone") {
+    void import("./hud/standalone")
+        .then((m) => m.bootStandalone(document.body))
+        .catch((error) => console.error("Standalone HUD failed to start:", error));
+} else {
+    const game: Game = createGame(resolveSeed());
 
-// A refresh resumes the last saved world, unless the user asked for a fresh
-// one via `?seed=`.
-try {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (saved && !window.location.search.includes("seed=")) game.load(saved);
-} catch {
-    /* an invalid or absent save is not fatal; keep the seeded world */
+    // A refresh resumes the last saved world, unless the user asked for a
+    // fresh one via `?seed=`.
+    try {
+        const saved = localStorage.getItem(SAVE_KEY);
+        if (saved && !window.location.search.includes("seed=")) game.load(saved);
+    } catch {
+        /* an invalid or absent save is not fatal; keep the seeded world */
+    }
+
+    void runApp({ plugins: [GamePlugin(game)], ui: mountHud }).catch((error) => {
+        console.error("Engine failed to start:", error);
+    });
 }
-
-void runApp({ plugins: [GamePlugin(game)], ui: mountHud }).catch((error) => {
-    console.error("Engine failed to start:", error);
-});

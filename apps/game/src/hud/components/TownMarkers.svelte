@@ -1,6 +1,15 @@
 <script lang="ts">
     import { game } from "../lib/game-state.svelte";
-    import { selectTown } from "../hud-bridge";
+
+    function dotClick(id: string): void {
+        // Selecting a town on the map opens its panel in the dock.
+        if (game.selectedTownId === id) {
+            game.selectTown(null);
+        } else {
+            game.selectTown(id);
+            game.openPanelById("town");
+        }
+    }
 </script>
 
 {#if game.snapshot}
@@ -12,7 +21,7 @@
             style="left: {s.x}px; top: {s.y}px;"
             title={townById.get(s.id)}
             aria-label={townById.get(s.id)}
-            onclick={() => selectTown(game.selectedTownId === s.id ? null : s.id)}
+            onclick={() => dotClick(s.id)}
         ></button>
     {/each}
 {/if}

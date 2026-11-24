@@ -1,7 +1,12 @@
 import { createRng } from "./rng";
 import type { World } from "./state";
 
-const FORMAT_VERSION = 1;
+// Phase 2 set format 3; Phase 3 adds roads, journeys, county bounds, carry
+// capacity, and the road counter. Phase 4a replaces the price-trend market
+// with the stock economy (production, consumption, target), town population,
+// and quote-based pricing. Phase 4b adds shocks, NPC traders, and the society
+// chain, and the world's shape changes again.
+const FORMAT_VERSION = 6;
 
 /**
  * Serialize the world to a string that restores it exactly. The RNG state is
@@ -9,7 +14,9 @@ const FORMAT_VERSION = 1;
  */
 export function serializeState(world: World): string {
   const { rng, ...data } = world;
-  const envelope = { version: FORMAT_VERSION, rngState: rng.state, ...data };
+  // The rng state is a 32-bit integer; store it unsigned so a signed/unsigned
+  // sign difference never breaks a save/reload round-trip.
+  const envelope = { version: FORMAT_VERSION, rngState: rng.state >>> 0, ...data };
   return JSON.stringify(envelope);
 }
 
