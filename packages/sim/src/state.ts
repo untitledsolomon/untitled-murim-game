@@ -28,6 +28,8 @@ export interface Person {
   stock: Record<GoodId, number>;
   /** Family relation to the player, when this person is family. */
   familyRole?: "spouse" | "child" | "parent";
+  /** True for NPC merchants driven by the trader system (Phase 4b). */
+  isTrader?: boolean;
 }
 
 /** A journey along roads, started with a travel command and completed in tick. */
@@ -112,6 +114,21 @@ export interface Road {
   status: "open" | "flooded";
 }
 
+/**
+ * A transient world event spawned by the seeded rng. Drought and good harvest
+ * target a county (scaling its grain), plague targets a county (spiking its
+ * medicine need), and flood targets a road (closing it until it clears). Only
+ * shocks whose endDay has not passed are kept in the world.
+ */
+export interface Shock {
+  id: string;
+  kind: "drought" | "good_harvest" | "flood" | "plague";
+  /** Per kind: the affected county id, or the road id for a flood. */
+  targetId: string;
+  startDay: DayNumber;
+  endDay: DayNumber;
+}
+
 export interface Outcome {
   day: DayNumber;
   /** The person who acted; null when the actor could not be resolved. */
@@ -157,6 +174,8 @@ export interface World {
   history: Outcome[];
   /** Recent alerts for the feed. Newest first. */
   alerts: AlertState[];
+  /** Active shocks, oldest first; expired shocks are culled each tick. */
+  shocks: Shock[];
   rng: Rng;
   /** Next counters, so ids stay unique across a run. */
   counters: {
@@ -168,6 +187,7 @@ export interface World {
     alert: number;
     command: number;
     road: number;
+    shock: number;
   };
 }
 

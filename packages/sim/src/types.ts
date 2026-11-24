@@ -180,6 +180,18 @@ export interface LedgerEntry {
   kind: string;
 }
 
+/** An active shock as the UI reads it. Fog-gated like any world fact in Phase 5. */
+export interface ShockSnapshot {
+  id: string;
+  kind: "drought" | "good_harvest" | "flood" | "plague";
+  /** Human label of the target: a county name, or the road's two towns. */
+  targetLabel: string;
+  startDay: DayNumber;
+  endDay: DayNumber;
+  /** Whole days until the shock clears. */
+  daysLeft: number;
+}
+
 export interface Snapshot {
   seed: number;
   day: DayNumber;
@@ -189,6 +201,8 @@ export interface Snapshot {
   roads: RoadSnapshot[];
   organizations: OrganizationSnapshot[];
   goods: GoodDef[];
+  /** Shocks still active in the world, oldest first. */
+  shocks: ShockSnapshot[];
   measures: Measures;
   alerts: Alert[];
   outliner: OutlinerItem[];

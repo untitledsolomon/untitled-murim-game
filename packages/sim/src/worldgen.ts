@@ -15,6 +15,8 @@ import {
   STARTING_CASH,
   TOLL_PER_UNIT,
   TOWNS_PER_COUNTY,
+  TRADERS_PER_COUNTY,
+  TRADERS_PER_HOUSE,
   WORLD_SIZE,
 } from "./constants";
 import { round } from "./explain";
@@ -55,8 +57,9 @@ export function generateWorld(seed: number): World {
     commandLog: [],
     history: [],
     alerts: [],
+    shocks: [],
     rng,
-    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0, road: 0 },
+    counters: { person: 0, town: 0, county: 0, org: 0, holding: 0, alert: 0, command: 0, road: 0, shock: 0 },
   };
 
   // Counties laid out on a square grid.
@@ -101,9 +104,50 @@ export function generateWorld(seed: number): World {
   // The merchant house town's population is boosted inside generateOrganizations,
   // so the economy is sized against the final populations.
   initializeEconomy(world, rng);
+  generateTraders(world, counters, names, rng);
   generatePlayer(world, counters, names, rng);
 
   return world;
+}
+
+/**
+ * The NPC merchants who keep the world trading without the player: a couple in
+ * every county plus a couple tied to each merchant house. They are ordinary
+ * people with the `isTrader` flag and a merchant's starting purse; the trader
+ * system in npc.ts decides their actions each day from that point on.
+ */
+function generateTraders(
+  world: World,
+  counters: GenCounters,
+  names: ReturnType<typeof makeNameGen>,
+  rng: ReturnType<typeof createRng>,
+): void {
+  for (const county of world.counties) {
+    const towns = world.towns.filter((t) => t.countyId === county.id);
+    for (let i = 0; i < TRADERS_PER_COUNTY; i++) {
+      createTrader(world, counters, names, rngPick(rng, towns).id, rng);
+    }
+  }
+  const houses = world.organizations.filter((o) => o.kind === "merchant_house");
+  for (const house of houses) {
+    const homeTown = world.towns.find((t) => t.countyId === house.countyId) ?? rngPick(rng, world.towns);
+    for (let i = 0; i < TRADERS_PER_HOUSE; i++) {
+      createTrader(world, counters, names, homeTown.id, rng);
+    }
+  }
+}
+
+function createTrader(
+  world: World,
+  counters: GenCounters,
+  names: ReturnType<typeof makeNameGen>,
+  homeTownId: TownId,
+  rng: ReturnType<typeof createRng>,
+): void {
+  const id = makePerson(world, counters, names, homeTownId, rngInt(rng, 18, 55));
+  const person = world.people[id]!;
+  person.isTrader = true;
+  person.wealth = Math.round(rngRange(rng, 150, 400));
 }
 
 /**

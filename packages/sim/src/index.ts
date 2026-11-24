@@ -1,4 +1,5 @@
-import { applyCommand, commandSpec } from "./actions";
+import { commandSpec } from "./actions";
+import { submitCommand } from "./commands";
 import { buildSnapshot } from "./snapshot";
 import { deserializeState, serializeState } from "./serialization";
 import { stepDay } from "./tick";
@@ -11,6 +12,7 @@ export * from "./types";
 export * from "./constants";
 export * from "./paths";
 export * from "./pricing";
+export * from "./npc";
 export { commandSpec };
 
 /** A world plus the operations the rest of the program needs. */
@@ -22,12 +24,13 @@ export interface Game {
   /** The UI-facing read of the current state. Pure and cheap. */
   snapshot(options?: SnapshotOptions): Snapshot;
   /**
-   * The single entry point for commands, player or AI. Assigns the command id,
-   * defaults the execution day to today, and records the submission in
-   * `world.commandLog` for replay. A command that is already due
-   * (`command.day <= world.day`) applies immediately, in submission order, so
-   * a paused game reacts the instant the actor acts. A future-dated command is
-   * queued and runs when its day arrives. Returns the assigned command.
+   * The single entry point for commands from the app, player or AI. Assigns
+   * the command id, defaults the execution day to today, and records the
+   * submission in `world.commandLog` for replay, so a recorded log replays
+   * byte-identically. A command already due (`command.day <= world.day`)
+   * applies immediately, in submission order; a future-dated command is queued
+   * for its day. NPC traders act through the same path inside the daily tick
+   * (see `submitCommand` in commands.ts).
    */
   send(actor: ActorRef, spec: CommandSpec): Command;
   serialize(): string;
@@ -56,14 +59,7 @@ export function createGame(seed: number): Game {
       return buildSnapshot(world, options);
     },
     send(actor: ActorRef, spec: CommandSpec) {
-      const command = buildCommand(world, actor, spec);
-      world.commandLog.push({ day: world.day, order: orderOf(command), command });
-      if (command.day <= world.day) {
-        applyCommand(world, command);
-      } else {
-        world.queue.push(command);
-      }
-      return command;
+      return submitCommand(world, actor, spec);
     },
     serialize() {
       return serializeState(world);
@@ -73,19 +69,6 @@ export function createGame(seed: number): Game {
       copyWorld(world, loaded);
     },
   };
-}
-
-/** Number the command from the shared counter; the id embeds the order. */
-function buildCommand(world: World, actor: ActorRef, spec: CommandSpec): Command {
-  const day = spec.day ?? world.day;
-  const id = `cmd-${world.counters.command++}`;
-  if (spec.kind === "travel") return { id, actor, day, kind: "travel", to: spec.to };
-  if (spec.kind === "buy") return { id, actor, day, kind: "buy", good: spec.good, at: spec.at, quantity: spec.quantity };
-  return { id, actor, day, kind: "sell", good: spec.good, at: spec.at, quantity: spec.quantity };
-}
-
-function orderOf(command: Command): number {
-  return Number(command.id.slice("cmd-".length));
 }
 
 function copyWorld(target: World, source: World): void {

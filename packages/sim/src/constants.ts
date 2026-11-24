@@ -73,8 +73,27 @@ export const DAILY_TARGET_DAYS = 30;
 /** The sell penalty, as a fraction of the buy price, own factor. */
 export const TRADE_SPREAD = 0.05;
 
-/** Baseline provision: a town always holds at least this many days of stock. */
+/**
+ * The hard floor every essential market holds, as days of local consumption.
+ * No market ever drops below this: a town keeps at least a few days' supply
+ * even when every road to it is blocked.
+ */
 export const IMPORT_FLOOR_DAYS = 3;
+
+/**
+ * How eagerly an essential market imports from distant markets when its own
+ * land cannot cover its people that day. When effective production is below
+ * effective consumption (crime and shocks included), and stock is under this
+ * many days of consumption, the market restocks at IMPORT_PROVISION_RATE times
+ * daily consumption each day (capped at target). The rate exceeds baseline
+ * consumption, so a deficit self-heals toward roughly IMPORT_PROVISION_DAYS
+ * days of stock — a town that grows too little grain, or is drought-hit, is
+ * chronically dear (near 2× base) but never starves, and stays a market worth
+ * selling into. A plague's doubled medicine need still outstrips the 1.25×
+ * rate, so a plague county genuinely shortfalls (see docs/decisions.md 4b).
+ */
+export const IMPORT_PROVISION_DAYS = 15;
+export const IMPORT_PROVISION_RATE = 1.25;
 
 /** How much of their own consumption a county produces for widespread goods. */
 export const COUNTY_SELF_SUFFICIENCY = 1.15;
@@ -94,9 +113,44 @@ export const UNREST_CAP = 0.6;
 export const UNREST_PER_SHORTAGE = 0.1;
 export const UNREST_REVERT = 0.05;
 
+/** Crime chases sustained unrest (see docs/decisions.md Phase 4b). */
+export const CRIME_FROM_UNREST = 0.8;
+export const CRIME_REVERT = 0.04;
+/** The highest share of a town's production that crime can cut. */
+export const CRIME_PRODUCTION_CUT = 0.2;
+
 /** Stock-based price-alert thresholds, as shares of target. */
 export const ALERT_SCARCE_RATIO = 0.3;
 export const ALERT_GLUT_RATIO = 1.8;
+
+/** How far a trader looks for profit, in road travel days from their town. */
+export const TRADER_RANGE = 20;
+/** A trader re-decides on every Nth day, staggered across all traders. */
+export const TRADER_STAGGER = 1;
+/** A trade must promise at least this much profit before it is attempted. */
+export const TRADER_MIN_MARGIN = 2;
+/** Share of cash committed to a buy, leaving headroom for market impact. */
+export const TRADER_BUY_SAFETY = 0.9;
+export const TRADERS_PER_COUNTY = 3;
+export const TRADERS_PER_HOUSE = 3;
+
+/** Daily chance a shock begins, and the range of days it lasts. */
+export const SHOCK_DROUGHT_CHANCE = 0.006;
+export const SHOCK_HARVEST_CHANCE = 0.005;
+export const SHOCK_FLOOD_CHANCE = 0.005;
+export const SHOCK_PLAGUE_CHANCE = 0.004;
+export const DROUGHT_MIN_DAYS = 60;
+export const DROUGHT_MAX_DAYS = 120;
+export const HARVEST_MIN_DAYS = 60;
+export const HARVEST_MAX_DAYS = 120;
+export const FLOOD_MIN_DAYS = 20;
+export const FLOOD_MAX_DAYS = 60;
+export const PLAGUE_MIN_DAYS = 30;
+export const PLAGUE_MAX_DAYS = 60;
+/** Effect sizes for active shocks, applied to effective production/consumption. */
+export const DROUGHT_GRAIN_SCALE = 0.4;
+export const HARVEST_GRAIN_SCALE = 1.4;
+export const PLAGUE_NEED_SCALE = 2.0;
 
 /**
  * Where each good is produced. Widespread goods come from every town in

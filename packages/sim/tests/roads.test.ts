@@ -109,7 +109,10 @@ describe("phase 3: road graph and travel", () => {
     const expectedToll = Math.min(plan.toll, cashBefore);
     expect(game.snapshot().player.cash).toBe(cashBefore - expectedToll);
     expect(game.snapshot().player.location).toBe(target);
-    expect(game.world.history.at(-1)!.text).toContain("tolls");
+    // NPC traders act on the same day, so the world history's last entry is not
+    // necessarily the player's; read the player's own latest outcome.
+    const mine = [...game.world.history].reverse().find((h) => h.actorId === game.snapshot().player.personId);
+    expect(mine?.text).toContain("tolls");
   });
 
   test("buying beyond the carry capacity fails cleanly", () => {

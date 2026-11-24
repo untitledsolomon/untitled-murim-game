@@ -11,6 +11,7 @@ import {
   type PlayerJourney,
   type Price,
   type RoadSnapshot,
+  type ShockSnapshot,
   type Snapshot,
   type SnapshotOptions,
   type TownSnapshot,
@@ -124,6 +125,25 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
 
   const outliner = buildOutliner(towns, organizations);
 
+  const shocks: ShockSnapshot[] = world.shocks.map((shock) => {
+    let targetLabel = shock.targetId;
+    if (shock.kind === "flood") {
+      const road = world.roads.find((r) => r.id === shock.targetId);
+      if (road) targetLabel = `${townById(world, road.a)?.name ?? road.a}–${townById(world, road.b)?.name ?? road.b}`;
+    } else {
+      const county = world.counties.find((c) => c.id === shock.targetId);
+      if (county) targetLabel = county.name;
+    }
+    return {
+      id: shock.id,
+      kind: shock.kind,
+      targetLabel,
+      startDay: shock.startDay,
+      endDay: shock.endDay,
+      daysLeft: Math.max(0, shock.endDay - world.day),
+    };
+  });
+
   return {
     seed: world.seed,
     day: world.day,
@@ -145,6 +165,7 @@ export function buildSnapshot(world: World, options: SnapshotOptions = {}): Snap
     roads,
     organizations,
     goods: GOODS,
+    shocks,
     measures,
     alerts,
     outliner,

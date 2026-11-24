@@ -4,8 +4,9 @@ import type { World } from "./state";
 // Phase 2 set format 3; Phase 3 adds roads, journeys, county bounds, carry
 // capacity, and the road counter. Phase 4a replaces the price-trend market
 // with the stock economy (production, consumption, target), town population,
-// and quote-based pricing.
-const FORMAT_VERSION = 5;
+// and quote-based pricing. Phase 4b adds shocks, NPC traders, and the society
+// chain, and the world's shape changes again.
+const FORMAT_VERSION = 6;
 
 /**
  * Serialize the world to a string that restores it exactly. The RNG state is

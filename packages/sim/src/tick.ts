@@ -2,15 +2,22 @@ import { applyCommand, recordOutcome } from "./actions";
 import {
   ALERT_GLUT_RATIO,
   ALERT_SCARCE_RATIO,
+  CRIME_FROM_UNREST,
+  CRIME_PRODUCTION_CUT,
+  CRIME_REVERT,
   goodLabel,
   GOODS,
   IMPORT_FLOOR_DAYS,
+  IMPORT_PROVISION_DAYS,
+  IMPORT_PROVISION_RATE,
   SHORTAGE_RATIO,
   UNREST_CAP,
   UNREST_PER_SHORTAGE,
   UNREST_REVERT,
 } from "./constants";
+import { runTraders } from "./npc";
 import { rngGaussian } from "./rng";
+import { activeShockCounties, runShocks, shockScales } from "./shocks";
 import type { Person, World } from "./state";
 import { makeAlert, type MarketEntry } from "./state";
 import type { GoodId, TownId } from "./types";
@@ -69,16 +76,31 @@ function runJourneys(world: World): void {
  * The stock economy: each town's markets take in production and pay out
  * consumption every day, and the stock that remains sets the price. Surplus
  * towns accumulate (prices fall toward the floor), deficit towns deplete
- * (prices rise toward the ceiling). A small import floor keeps essential
- * markets above outright starvation, so one blocked road never empties a
- * town's granary forever.
+ * (prices rise toward the ceiling). Crime trims the town's output, and active
+ * shocks scale production (drought, good harvest) or consumption (plague). An
+ * essential market whose land cannot cover its people that day imports from
+ * distant markets when it runs thin, so a place with no salt, or a county hit
+ * by drought, is dear but never starves; the hard import floor then guarantees
+ * even a blocked town keeps a few days' supply.
  */
 function runEconomy(world: World): void {
+  const counties = activeShockCounties(world);
   for (const town of world.towns) {
+    const crimeCut = 1 - CRIME_PRODUCTION_CUT * town.crime;
     for (const good of GOODS) {
       const entry = world.markets[town.id]![good.id];
-      let stock = entry.stock + entry.production - entry.dailyConsumption;
+      const scales = shockScales(counties, town.countyId, good.id);
+      const production = entry.production * crimeCut * scales.productionScale;
+      const consumption = entry.dailyConsumption * scales.consumptionScale;
+      let stock = entry.stock + production - consumption;
       if (stock < 0) stock = 0;
+      if (
+        good.essential &&
+        production < consumption &&
+        stock < entry.dailyConsumption * IMPORT_PROVISION_DAYS
+      ) {
+        stock = Math.min(entry.target, stock + entry.dailyConsumption * IMPORT_PROVISION_RATE);
+      }
       const floor = good.essential ? entry.dailyConsumption * IMPORT_FLOOR_DAYS : 0;
       if (stock < floor) stock = floor;
       entry.stock = stock;
@@ -90,8 +112,7 @@ function runSociety(world: World): void {
   const rng = world.rng;
   for (const town of world.towns) {
     // Unrest is bounded and mean-reverting: shortages of essentials push it up,
-    // restocked markets let it ease. This is the first link of the society
-    // chain; crime and production cuts join in Phase 4b.
+    // restocked markets let it ease.
     let shortages = 0;
     for (const good of GOODS) {
       const entry = world.markets[town.id]![good.id];
@@ -99,8 +120,11 @@ function runSociety(world: World): void {
     }
     const desired = Math.min(UNREST_CAP, shortages * UNREST_PER_SHORTAGE);
     town.unrest = clamp01(town.unrest + (desired - town.unrest) * UNREST_REVERT);
-    // Crime keeps its old random walk for now; a real chain replaces it in 4b.
-    town.crime = clamp01(town.crime + rngGaussian(rng) * 0.005);
+    // Crime chases sustained unrest and eases as the market calms. High crime
+    // then trims the town's production in the economy system (the two systems
+    // run a day apart, so today's unrest shapes tomorrow's output).
+    const crimeTarget = clamp01(CRIME_FROM_UNREST * town.unrest);
+    town.crime = clamp01(town.crime + (crimeTarget - town.crime) * CRIME_REVERT);
   }
   for (const org of world.organizations) {
     // Reputation keeps a slow random walk as a placeholder; a real system comes later.
@@ -146,6 +170,8 @@ export const SYSTEMS: System[] = [
   { name: "economy", run: runEconomy },
   { name: "society", run: runSociety },
   { name: "alerts", run: emitAlerts },
+  { name: "traders", run: runTraders },
+  { name: "shocks", run: runShocks },
 ];
 
 function townName(world: World, townId: TownId): string {

@@ -28,7 +28,17 @@
                 <span>Reveal all (fog off)</span>
             </label>
         {/if}
-        <p class="none">Active shocks: none yet — shocks land in a later phase.</p>
+        {#if game.snapshot && game.snapshot.shocks.length > 0}
+            <ul class="shocks">
+                {#each game.snapshot.shocks as shock (shock.id)}
+                    <li>
+                        {shock.kind.replace("_", " ")} on {shock.targetLabel}, {shock.daysLeft}d left
+                    </li>
+                {/each}
+            </ul>
+        {:else}
+            <p class="none">Active shocks: none right now.</p>
+        {/if}
     </section>
 {/if}
 
@@ -84,5 +94,17 @@
         margin: 0;
         font-size: 11px;
         color: var(--paper-faint);
+    }
+
+    .shocks {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 11px;
+        color: var(--paper-dim);
+        text-transform: capitalize;
     }
 </style>

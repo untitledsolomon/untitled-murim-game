@@ -79,6 +79,91 @@ ask unless truly blocked. Entries are newest first.
 - **`FORMAT_VERSION` 4 → 5.** Market entries, town population, and the pricing
   model all changed shape; old saves are rejected.
 
+## Phase 4b — shocks, traders, society, report
+
+- **Two trader populations.** `TRADERS_PER_COUNTY = 3` merchants live in each
+  county and `TRADERS_PER_HOUSE = 3` in each merchant house (18 total). They are
+  ordinary people with `isTrader` set and a 150–400 starting purse; from then on
+  the trader system in `npc.ts` decides their actions every day. They submit
+  through the same `submitCommand` path as the player but with `log = false`:
+  stepping the sim reproduces their decisions deterministically, and logging
+  them would make a command-log replay apply each trade twice.
+- **Traders act on an honest, whole-load quote — same math as the player.** A
+  trader's plan prices the entire load at its true realized average (drain a
+  market and later units cost more; fill it and later units fetch less), via
+  closed-form `sumMultipliers` instead of a per-unit loop, so the hot path stays
+  O(1). A trade that would crash a small market is worth only what it truly
+  fetches. This matters to the player too: the trader and the player fight for
+  the same markets, so "the player's marginal price is the honest price" had to
+  be true for traders as well.
+- **Traders size each trip to its profit after both tolls.** `planTraderBuy`
+  compares realized proceeds at the resale town (found by a fresh Dijkstra over
+  roads in `TRADER_RANGE = 20`) minus the realized bill minus the round-trip
+  tolls, and skips anything under `TRADER_MIN_MARGIN = 2`. `TRADER_BUY_SAFETY =
+  0.9` keeps 10% of cash clear of a single order.
+- **NPCs re-check the market is still theirs before committing.** All traders
+  plan against one day-start snapshot, but they act in sequence, so the first
+  trader to drain a source can raise the price the next one pays. Before
+  submitting, a trader re-quotes the planned load at the live market and stands
+  down unless the full load still fits its budget — it never issues an order
+  that would fail validation (a failure would waste the trip), and never carries
+  a shrunken load across both tolls (a guaranteed loss). A Phase 4b test enforces
+  "no `trade-failed`/`travel-failed` outcome ever has a trader as its actor."
+- **A trader's reach map is its planning knowledge.** Every town within 20
+  road-days reachable over *open* roads (flooded roads are skipped, exactly as
+  `shortestPath` treats them, so a planned route can never fail to resolve). It
+  is cached per snapshot and shared by all traders that day; the flood-skip
+  rule is enforced by a test. Until fog exists, traders see true prices and
+  routes — a knowledge stand-in recorded here so Phase 5 can replace it.
+- **Shocks: drought, good harvest, flood, plague.** Each has a seeded daily
+  chance (`0.006`/`0.005`/`0.005`/`0.004`) and a duration band (drought and
+  harvest 60–120 days, flood 20–60, plague 30–60). Drought scales a county's
+  grain production ×0.4, harvest ×1.4, plague scales a county's medicine need ×2,
+  and a flood closes its road for the duration. Shocks run last in the tick so
+  they observe the day they spawned into; expired shocks are culled and a
+  flooded road reopens when its shock clears. The world is always connected
+  because town pairs across components are joined at worldgen, so a flood
+  slows a route, never severs the country.
+- **The import floor stopped being the starvation line.** With drought and
+  plague in, the old `IMPORT_FLOOR_DAYS = 3` floor was keeping whole counties
+  at the famine floor for 30+ days at a stretch — the stockout target measured
+  exactly that. Provisioning now triggers on `production < consumption` for any
+  essential (crime and shocks included) and restocks at `IMPORT_PROVISION_RATE =
+  1.25×` toward the 15-day provision line, capped at target. A low-yield grain
+  town or a drought-hit county is chronically dear (prices near 2× base — the
+  dry county's grain price gap vs. un-droughted neighbors is the drought's
+  visible mark) but never starves, because it genuinely imports its shortfall;
+  the hard 3-day floor remains as the ceiling of "how wrong even a fully blocked
+  town can get". Plague still bites: a county's doubled medicine need outpaces
+  the 1.25× provision, so medicine genuinely runs short during one.
+- **Society's first real chain: shortages → unrest → crime → worse yields.**
+  `SHORTAGE_RATIO = 0.5` of target triggers a shortage; unrest converges toward
+  `shortages × 0.1`, capped at 0.6, at 5%/day. Crime chases unrest (`×0.8`, 4%
+  revert), and the economy trims a town's output by up to `CRIME_PRODUCTION_CUT
+  = 0.2 × crime` the next day. The checkpoint report caps crime at ~0.2 and
+  unrest at ~0.19 even with live traders, so the numbers stay tame.
+- **`TRADER_STAGGER = 1`.** Every trader decides every day. The cost is a
+  heavier hot path (one Dijkstra + whole-load quotes per trader per day); the
+  win is liveliness: ~13,500 buy and ~13,500 sell orders over 50 years, and both
+  margins compress. The 2 ms/day checkpoint budget still passes.
+- **"NPCs visibly compress margins" is measured head to head, not over time.**
+  An early-vs-late margin trend stays flat under provisioning because the
+  provision line pins the deficit-town price at ~2× forever. The honest test is
+  the same 50-year world run twice — once with traders, once with all 18
+  disabled — and comparing cross-town price dispersion (`mean |price − 1|`): the
+  trader world ends at 0.703 vs 0.848 without them. Disabling traders consumes
+  no rng, so the two worlds share every economy/society/shock draw and differ
+  only in what commerce does. The sim:report prints the head-to-head.
+- **Simplicity over cleverness in the report.** Bots are 60 lines of greedy
+  planner code over `game.send`, chosen because they are readable in the report
+  and exercise the exact public command API a player uses; each bot's wealth
+  series is the 720-day checkpoint. The full checkpoint runs ~15 s and every
+  Phase 4 target passes: prices in bounds, no bad stock, 2.7% stockouts
+  (< 5%), careful bot ~1900 cash (target 400+), careless bot loses, margins
+  compress, 0.8 ms/day (< 2).
+- **`FORMAT_VERSION` 5 → 6.** Shocks, `isTrader`, crime, and the provision
+  fields changed shape; old saves are rejected.
+
 ## Phase 3 — world shape, roads, travel time
 
 - **Travel is a journey, not an instant jump.** A `travel` command plans a
@@ -165,9 +250,6 @@ ask unless truly blocked. Entries are newest first.
 
 - Phase 3: no random road robbery in v0.1 (road travel is costly only in
   days and tolls).
-- Phase 4b: NPC knowledge stand-in (they trade on true spot prices until fog
-  exists); tuned economic constants and why (the Phase 4a economy and its
-  resource placement, global ±5% base prices, and factor decomposition are
-  decided above).
 - Phase 5: `shortestPath` plans over true open roads — a small, known
   omniscience the player does not have.
+
